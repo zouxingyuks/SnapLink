@@ -9,6 +9,15 @@ var defaultConfig = map[string]any{
 	"system": system{
 		Env: "dev",
 	},
+	"database": database{
+		User:       "",
+		Password:   "",
+		Host:       "",
+		Name:       "",
+		Port:       3306,
+		Charset:    "utf8",
+		UnixSocket: false,
+	},
 }
 
 // SystemConfig 系统配置
@@ -31,5 +40,32 @@ func System() *system {
 			}
 		})
 	return systemInstance.system
+
+}
+
+type database struct {
+	User       string
+	Password   string
+	Host       string
+	Name       string
+	Port       int
+	Charset    string
+	UnixSocket bool
+}
+
+var databaseInstance = new(struct {
+	sync.Once
+	*database
+})
+
+func DataBase() *database {
+	databaseInstance.Do(
+		func() {
+			err := config().Sub("database").Unmarshal(&systemInstance.system)
+			if err != nil {
+				panic(errors.New("init databaseConfig...failed").Error())
+			}
+		})
+	return databaseInstance.database
 
 }
