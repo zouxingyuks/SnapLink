@@ -15,7 +15,6 @@ var defaultConfig = map[string]any{
 		Host:       "",
 		Name:       "",
 		Port:       3306,
-		Charset:    "utf8",
 		UnixSocket: false,
 	},
 }
@@ -49,7 +48,6 @@ type database struct {
 	Host       string
 	Name       string
 	Port       int
-	Charset    string
 	UnixSocket bool
 }
 

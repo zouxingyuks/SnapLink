@@ -15,10 +15,11 @@ var dbInstance = new(struct {
 })
 
 // 连接MySQL数据库
+// 此处使用utf_8_bin编码，因为utf_8_general_ci不区分大小写，会导致短链接空间小很多
 //
 //go:generate go get -u gorm.io/driver/mysql
-func connMysql(user, password, host string, port int, name, charset string) (*gorm.DB, error) {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local", user, password, host, port, name, charset)
+func connMysql(user, password, host string, port int, name string) (*gorm.DB, error) {
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8_bin&parseTime=True&loc=Local", user, password, host, port, name)
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	return db, err
 }

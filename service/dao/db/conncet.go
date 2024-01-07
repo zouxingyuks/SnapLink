@@ -16,7 +16,6 @@ func DB() *gorm.DB {
 			conf.DataBase().Host,
 			conf.DataBase().Port,
 			conf.DataBase().Name,
-			conf.DataBase().Charset,
 		)
 		if err != nil {
 			panic(errors.Wrap(err, "connect to database failed"))
