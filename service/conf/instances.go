@@ -59,7 +59,7 @@ var databaseInstance = new(struct {
 func DataBase() *database {
 	databaseInstance.Do(
 		func() {
-			err := config().Sub("database").Unmarshal(&systemInstance.system)
+			err := config().Sub("database").Unmarshal(&databaseInstance.database)
 			if err != nil {
 				panic(errors.New("init databaseConfig...failed").Error())
 			}
