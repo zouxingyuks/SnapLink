@@ -17,6 +17,12 @@ var defaultConfig = map[string]any{
 		Port:       3306,
 		UnixSocket: false,
 	},
+	"redis": redis{
+		Network:  "tcp",
+		Server:   "localhost:6379",
+		PoolSize: 10,
+		DB:       0,
+	},
 }
 
 // SystemConfig 系统配置
@@ -66,4 +72,29 @@ func DataBase() *database {
 		})
 	return databaseInstance.database
 
+}
+
+type redis struct {
+	Network  string
+	Server   string
+	User     string
+	Password string
+	PoolSize int
+	DB       int
+}
+
+var redisInstance = new(struct {
+	sync.Once
+	*redis
+})
+
+func Redis() *redis {
+	redisInstance.Do(
+		func() {
+			err := config().Sub("redis").Unmarshal(&redisInstance.redis)
+			if err != nil {
+				panic(errors.New("init redisConfig...failed").Error())
+			}
+		})
+	return redisInstance.redis
 }
