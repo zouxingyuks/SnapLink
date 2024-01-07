@@ -1,18 +1,23 @@
 package shortLink
 
 import (
-	"crypto/sha1"
-	"fmt"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
+	"github.com/pkg/errors"
 	model "go-ssas/model/shortLink"
 	"go-ssas/service/dao/db"
 	"gorm.io/gorm"
+	"log"
 	"net/url"
 	"time"
 )
 
-var hash = sha1.New()
+type Param struct {
+	OriginURL   string `json:"origin_url"`
+	GID         string `json:"gid"`
+	ValidTime   string `json:"valid_time"`
+	ValidType   string `json:"valid_type"`
+	Description string `json:"description"`
+}
 
 // Create 创建短链接
 // @Summary 创建短链接
@@ -28,83 +33,61 @@ var hash = sha1.New()
 // @Success 200 {string} string "{"code":200,"data":{},"msg":"ok"}"
 // @Router /shortLink/ [post]
 func Create(c *gin.Context) {
+	//0. 获取参数
+	param := Param{}
+	err := c.ShouldBindJSON(&param)
+	if err != nil {
+		//todo log  的设置
+		log.Println(errors.Wrap(err, " 参数绑定错误"))
+		c.JSON(400, gin.H{
+			"msg": "参数错误",
+		})
+		return
+	}
+
+	u, err := url.Parse(param.OriginURL)
+	if err != nil {
+		log.Println(errors.Wrap(err, "url格式错误"))
+		c.JSON(400, gin.H{
+			"msg": "url格式错误",
+		})
+		return
+	}
 	sLink := model.ShortLink{
 		Model:       gorm.Model{},
 		Clicks:      0,
-		Gid:         "",
 		Enable:      false,
-		CreateType:  "",
-		ValidTime:   time.Time{},
-		ValidType:   0,
-		Description: "",
-	}
-	//0. 获取参数
-	err := c.ShouldBind(&sLink)
-	if sLink.OriginURL == "" {
-		c.JSON(200, gin.H{
-			"code": 400,
-			"msg":  "原始链接不能为空",
-		})
-		return
+		Domain:      u.Host,
+		OriginURL:   u.String(),
+		Gid:         param.GID,
+		Description: param.Description,
 	}
 
-	//1. 分割原始链接
-	u, err := url.Parse(sLink.OriginURL)
-
+	sLink.ValidTime, err = time.Parse("2006-01-02 15:04:05", param.ValidTime)
 	if err != nil {
-		c.JSON(200, gin.H{
-			"code": 400,
-			"msg":  "原始链接格式错误",
+		log.Println(errors.Wrap(err, "时间格式错误"))
+		c.JSON(400, gin.H{
+			"msg": "时间格式错误,请使用 YYYY-MM-DD HH:mm:ss 格式",
 		})
 		return
 	}
-	sLink.Domain = u.Host
+
 	//2. 生成hash
 	sLink.URI = ShortLinkToHash(sLink.Domain, u.Path)
-	fmt.Println(sLink)
 	//3. 保存到数据库
-	db.DB().Save(&sLink)
+	// 对布隆过滤器误判的情况进行判断
+	tdb := db.DB().Save(&sLink)
+	if tdb.Error != nil {
+		c.JSON(500, gin.H{
+			"msg": "保存失败",
+		})
+		return
+	}
 	fullShortURL := makeFullShortURL(sLink.URI)
 	//4. 返回短链接
 	c.JSON(200, gin.H{
-		"code": 200,
-		"url":  fullShortURL,
-		"msg":  "ok",
+		"url": fullShortURL,
+		"msg": "ok",
 	})
 
-}
-
-// makeFullShortURL 生成完整的短链接
-func makeFullShortURL(uri string) string {
-	//此处配置从配置文件中获取
-	u := url.URL{
-		Scheme: "http",
-		Host:   "anubis.cafe",
-		Path:   uri,
-	}
-	return u.String()
-}
-
-// ShortLinkToHash 短链接转hash
-func ShortLinkToHash(domain, shortLink string) string {
-	// 生成 hash
-	// 1. 生成 hash
-	uri := GenerateHash(shortLink)
-	for {
-		// 同一域名下的短链接不能重复
-		if existHash(domain, uri) {
-			//todo 如何取降低冲突
-			GenerateHash(shortLink)
-		}
-		break
-	}
-	return uri
-}
-func GenerateHash(uri string) string {
-	return uuid.New().String()
-}
-
-// 检查 hash 是否存在
-func existHash(Domain, hash string) bool {
-	return false
 }
