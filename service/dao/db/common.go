@@ -19,7 +19,7 @@ var dbInstance = new(struct {
 //
 //go:generate go get -u gorm.io/driver/mysql
 func connMysql(user, password, host string, port int, name string) (*gorm.DB, error) {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8_bin&parseTime=True&loc=Local", user, password, host, port, name)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local", user, password, host, port, name)
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	return db, err
 }
