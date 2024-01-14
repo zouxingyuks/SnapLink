@@ -73,16 +73,24 @@ func Create(c *gin.Context) {
 	}
 
 	//2. 生成hash
-	sLink.URI = ShortLinkToHash(sLink.Domain, u.Path)
+	sLink.URI = ToHash(sLink.Domain, u.Path)
 	//3. 保存到数据库
 	// 对布隆过滤器误判的情况进行判断
 	tdb := db.DB().Save(&sLink)
+	// 特别对于唯一索引的错误进行处理
 	if tdb.Error != nil {
+		if errors.Is(tdb.Error, gorm.ErrDuplicatedKey) {
+			c.JSON(500, gin.H{
+				"msg": "短链接已经存在",
+			})
+			return
+		}
 		c.JSON(500, gin.H{
 			"msg": "保存失败",
 		})
 		return
 	}
+
 	fullShortURL := makeFullShortURL(sLink.URI)
 	//4. 返回短链接
 	c.JSON(200, gin.H{
