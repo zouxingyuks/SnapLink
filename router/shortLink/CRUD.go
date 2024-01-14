@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-type Param struct {
+type CreateParam struct {
 	OriginURL   string `json:"origin_url"`
 	GID         string `json:"gid"`
 	ValidTime   string `json:"valid_time"`
@@ -34,7 +34,7 @@ type Param struct {
 // @Router /shortLink/ [post]
 func Create(c *gin.Context) {
 	//0. 获取参数
-	param := Param{}
+	param := CreateParam{}
 	err := c.ShouldBindJSON(&param)
 	if err != nil {
 		//todo log  的设置
@@ -98,4 +98,65 @@ func Create(c *gin.Context) {
 		"msg": "ok",
 	})
 
+}
+
+type PageListParam struct {
+	Page      int    `json:"page"`
+	PageSize  int    `json:"page_size"`
+	OriginURL string `json:"origin_url"`
+	GID       string `json:"gid"`
+	Enable    bool   `json:"enable"`
+	Domain    string `json:"domain"`
+}
+
+// PageList 短链接分页列表
+// @Summary 短链接分页列表
+// @Description 短链接分页列表，默认查询页码为1，每页数量为10
+// @Tags 短链接
+// @Accept application/json
+// @Produce application/json
+// @Param page query int false "页码"
+// @Param page_size query int false "每页数量"
+// @Param origin_url query string false "原始链接"
+// @Param domain query string false "域名"
+// @Param gid query string false "组id"
+// @Param enable query bool false "是否启用"
+// @Success 200 {string} string "{"code":200,"data":{},"msg":"ok"}"
+// @Router /shortLink/ [get]
+func PageList(c *gin.Context) {
+	//0. 获取参数
+	param := PageListParam{}
+	err := c.ShouldBindQuery(&param)
+	if err != nil {
+		//todo log  的设置
+		log.Println(errors.Wrap(err, " 参数绑定错误"))
+		c.JSON(400, gin.H{
+			"msg": "参数错误",
+		})
+		return
+	}
+	// 检查必要参数
+	if param.Page <= 0 {
+		param.Page = 1
+	}
+	if param.PageSize <= 0 {
+		param.PageSize = 10
+	}
+	//1. 查询数据库
+	var sLinks []model.ShortLink
+
+	db.DB().Where(&model.ShortLink{
+		OriginURL: param.OriginURL,
+		Gid:       param.GID,
+		Enable:    param.Enable,
+		Domain:    param.Domain,
+	}).Order("CreatedAt ASC").Find(&sLinks)
+	//2. 返回数据
+	c.JSON(200, gin.H{
+		"msg": "ok",
+		"data": gin.H{
+			"list":  sLinks,
+			"total": len(sLinks),
+		},
+	})
 }
