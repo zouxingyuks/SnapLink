@@ -1,4 +1,4 @@
-package shortLink
+package GenerateShortLink
 
 import "testing"
 

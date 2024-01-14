@@ -1,4 +1,4 @@
-package shortLink
+package GenerateShortLink
 
 import (
 	"crypto/sha256"
@@ -7,7 +7,7 @@ import (
 
 var hasher = sha256.New()
 
-// 短链接生成算法
+// GenerateHash 短链接生成算法
 func GenerateHash(uri string) string {
 	hasher.Write([]byte(uri))
 	sha := base64.URLEncoding.EncodeToString(hasher.Sum(nil))
