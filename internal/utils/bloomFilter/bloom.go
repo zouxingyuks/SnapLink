@@ -1,4 +1,4 @@
-package shortLink
+package bloomFilter
 
 import (
 	"bufio"
@@ -11,32 +11,32 @@ import (
 )
 
 var lock = new(sync.Mutex)
-var bloomFilterInstance = new(struct {
+var instance = new(struct {
 	sync.Once
 	*bloom.BloomFilter
 })
 
-// BloomFilter 布隆过滤器
+// Instance 布隆过滤器
 // 1. 读取持久化文件，如果不存在则创建
 // 2. 创建布隆过滤器
 // 3. 定时存储布隆过滤器
-func BloomFilter() *bloom.BloomFilter {
-	bloomFilterInstance.Do(func() {
+func Instance() *bloom.BloomFilter {
+	instance.Do(func() {
 		var err error
 		//1. 读取持久化文件，如果不存在则创建
 		//2. 创建布隆过滤器
-		bloomFilterInstance.BloomFilter, err = readBloomFilter("bloomFilter")
+		instance.BloomFilter, err = readBloomFilter("bloomFilter")
 		if err != nil {
 			if !os.IsNotExist(err) {
-				bloomFilterInstance.BloomFilter = bloom.NewWithEstimates(1000000, 0.01)
-				writeBloomFilter("bloomFilter", bloomFilterInstance.BloomFilter)
+				instance.BloomFilter = bloom.NewWithEstimates(1000000, 0.01)
+				writeBloomFilter("bloomFilter", instance.BloomFilter)
 			}
-			bloomFilterInstance.BloomFilter = bloom.NewWithEstimates(1000000, 0.01)
+			instance.BloomFilter = bloom.NewWithEstimates(1000000, 0.01)
 		}
 		//3. 定时存储布隆过滤器
 		go timerSaveBloomFilter()
 	})
-	return bloomFilterInstance.BloomFilter
+	return instance.BloomFilter
 
 }
 
@@ -45,13 +45,13 @@ func BloomFilter() *bloom.BloomFilter {
 // 定时存储布隆过滤器
 func timerSaveBloomFilter() {
 
-	clickTimer := time.NewTimer(time.Second * 10)
+	clickTimer := time.NewTimer(time.Minute * 10)
 	for {
 		select {
 		case <-clickTimer.C:
 			lock.Lock()
 			fmt.Println("定时存储布隆过滤器...")
-			err := writeBloomFilter("bloomFilter", bloomFilterInstance.BloomFilter)
+			err := writeBloomFilter("bloomFilter", instance.BloomFilter)
 			if err != nil {
 				panic(errors.Wrap(err, "write bloomFilter...failed").Error())
 			}
