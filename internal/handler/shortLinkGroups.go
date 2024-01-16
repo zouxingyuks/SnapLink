@@ -6,9 +6,11 @@ import (
 	"SnapLink/internal/ecode"
 	"SnapLink/internal/model"
 	"SnapLink/internal/types"
+	"SnapLink/pkg/sercurity"
 	"SnapLink/pkg/serialize"
 	"github.com/pkg/errors"
 	"github.com/zhufuyi/sponge/pkg/mysql/query"
+	"strconv"
 	"strings"
 
 	"github.com/zhufuyi/sponge/pkg/gin/middleware"
@@ -27,10 +29,9 @@ type ShortLinkGroupHandler interface {
 	Create(c *gin.Context)
 	DeleteByID(c *gin.Context)
 	DeleteByIDs(c *gin.Context)
-	UpdateByID(c *gin.Context)
+	UpdateByGID(c *gin.Context)
 	GetByID(c *gin.Context)
 	GetByCondition(c *gin.Context)
-	ListByIDs(c *gin.Context)
 	List(c *gin.Context)
 }
 
@@ -88,8 +89,8 @@ func (h *shortLinkGroupsHandler) Create(c *gin.Context) {
 }
 
 // List 列出所有短链接分组
-// @Summary 列出所有短链接分组，支持分页和条件查询，不传参数则返回所有
-// @Description 列出所有短链接分组，支持分页和条件查询，不传参数则返回所有
+// @Summary 列出所有短链接分组，支持分页和条件查询，不传参数则返回前100条
+// @Description 列出所有短链接分组，支持分页和条件查询，不传参数则返回前100条
 // @Tags shortLinkGroup
 // @Accept application/json
 // @Produce application/json
@@ -98,7 +99,7 @@ func (h *shortLinkGroupsHandler) Create(c *gin.Context) {
 // @Param sort body string false "排序字段"
 // @Success 200 {object} types.ListShortLinkGroupRespond{}
 // @Failure 400 string "{"msg": "参数错误"}"
-// @Router /api/v1/ShortLinkGroup/list [post]
+// @Router /api/v1/ShortLinkGroup/list [get]
 func (h *shortLinkGroupsHandler) List(c *gin.Context) {
 	//1. 参数解析
 	form := &types.ListShortLinkGroupRequest{}
@@ -107,10 +108,27 @@ func (h *shortLinkGroupsHandler) List(c *gin.Context) {
 		serialize.NewResponse(400, serialize.WithMsg("参数错误"), serialize.WithErr(err)).ToJSON(c)
 		return
 	}
+	//2. 参数校验
+	CUserId, exist := c.Get("c_user_id")
+	if CUserId == "" || !exist {
+		serialize.NewResponse(400, serialize.WithMsg("参数错误"), serialize.WithErr(errors.New("用户未登录"))).ToJSON(c)
+	}
+	// 默认值
+	if (form.Page+1)*(form.Size) == 0 {
+		form.Page = 0
+		form.Size = 100
+	}
 	param := query.Params{
 		Page: form.Page,
 		Size: form.Size,
 		Sort: form.Sort,
+		Columns: []query.Column{
+			{
+				Name:  "c_user_id",
+				Value: CUserId,
+				Exp:   "like",
+			},
+		},
 	}
 	ctx := middleware.WrapCtx(c)
 	shortLinkGroups, total, err := h.iDao.GetByColumns(ctx, &param)
@@ -126,6 +144,68 @@ func (h *shortLinkGroupsHandler) List(c *gin.Context) {
 	})).ToJSON(c)
 }
 
+// UpdateByGID 根据gid更新短链接分组
+// @Summary 根据gid更新短链接分组
+// @Description 根据gid更新短链接分组，需要登录
+// @Tags shortLinkGroup
+// @Accept application/json
+// @Produce application/json
+// @Param Authorization header string true "token"
+// @Param gid body string true "gid"
+// @Param name body string false "name"
+// @Param description body string false "description"
+// @Success 200 {object} types.UpdateShortLinkGroupByIDRespond{}
+// @Failure 400 string "{"msg": "参数错误"}"
+// @Failure 404 string "{"msg": "未找到该记录"}"
+// @Failure 500 string "{"msg": "更新失败"}"
+// @Router /api/v1/shortLinkGroups [put]
+func (h *shortLinkGroupsHandler) UpdateByGID(c *gin.Context) {
+	form := &types.UpdateShortLinkGroupByIDRequest{}
+	// 1.参数绑定
+	if !parseParams(c, form) {
+		return
+	}
+	// 2.参数校验
+	if form.Gid < 0 {
+		serialize.NewResponse(400, serialize.WithMsg("参数错误"), serialize.WithErr(errors.New("gid 不合法"))).ToJSON(c)
+		return
+	}
+	shortLinkGroup := &model.ShortLinkGroup{
+		Gid: form.Gid,
+	}
+	userid, _ := c.Get("c_user_id")
+	shortLinkGroup.CUserId = userid.(string)
+	if form.Name != "" {
+		_, yes := sercurity.CleanXSS(form.Name)
+		if yes {
+			serialize.NewResponse(400, serialize.WithMsg("参数错误"), serialize.WithErr(errors.New("name 不合法"))).ToJSON(c)
+			return
+		}
+		shortLinkGroup.Name = form.Name
+
+	}
+	if form.Description != "" {
+		_, yes := sercurity.CleanXSS(form.Description)
+		if yes {
+			serialize.NewResponse(400, serialize.WithMsg("参数错误"), serialize.WithErr(errors.New("description 不合法"))).ToJSON(c)
+			return
+		}
+		shortLinkGroup.Description = form.Description
+	}
+
+	ctx := middleware.WrapCtx(c)
+	err := h.iDao.UpdateByGidAndCUserId(ctx, shortLinkGroup)
+	if err != nil {
+		err = errors.Wrap(err, "写入数据库时失败")
+		logger.Error("UpdateByGID error", logger.Err(err), logger.Any("form", form), middleware.GCtxRequestIDField(c))
+		serialize.NewResponse(500, serialize.WithMsg("更新失败"), serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	logger.Info("更新成功", logger.Any("shortLinkGroup", shortLinkGroup), middleware.GCtxRequestIDField(c))
+	serialize.NewResponse(200, serialize.WithMsg("更新成功")).ToJSON(c)
+
+}
+
 // DeleteByID delete a record by id
 // @Summary delete shortLinkGroups
 // @Description delete shortLinkGroups by id
@@ -136,21 +216,22 @@ func (h *shortLinkGroupsHandler) List(c *gin.Context) {
 // @Success 200 {object} types.DeleteShortLinkGroupByIDRespond{}
 // @Router /api/v1/shortLinkGroups/{id} [delete]
 func (h *shortLinkGroupsHandler) DeleteByID(c *gin.Context) {
-	_, id, isAbort := getShortLinkGroupIDFromPath(c)
-	if isAbort {
-		response.Error(c, ecode.InvalidParams)
-		return
-	}
-
-	ctx := middleware.WrapCtx(c)
-	err := h.iDao.DeleteByID(ctx, id)
-	if err != nil {
-		logger.Error("DeleteByID error", logger.Err(err), logger.Any("id", id), middleware.GCtxRequestIDField(c))
-		response.Output(c, ecode.InternalServerError.ToHTTPCode())
-		return
-	}
-
-	response.Success(c)
+	//_, id, isAbort := getShortLinkGroupIDFromPath(c)
+	//if isAbort {
+	//	response.Error(c, ecode.InvalidParams)
+	//	return
+	//}
+	//
+	//ctx := middleware.WrapCtx(c)
+	//err := h.iDao.DeleteByID(ctx, id)
+	//if err != nil {
+	//	logger.Error("DeleteByID error", logger.Err(err), logger.Any("id", id), middleware.GCtxRequestIDField(c))
+	//	response.Output(c, ecode.InternalServerError.ToHTTPCode())
+	//	return
+	//}
+	//
+	//response.Success(c)
+	panic("implement me")
 }
 
 // DeleteByIDs delete records by batch id
@@ -180,52 +261,6 @@ func (h *shortLinkGroupsHandler) DeleteByIDs(c *gin.Context) {
 	}
 
 	response.Success(c)
-}
-
-// UpdateByID update information by id
-// @Summary update shortLinkGroups
-// @Description update shortLinkGroups information by id
-// @Tags shortLinkGroups
-// @accept json
-// @Produce json
-// @Param id path string true "id"
-// @Param data body types.UpdateShortLinkGroupByIDRequest true "shortLinkGroups information"
-// @Success 200 {object} types.UpdateShortLinkGroupByIDRespond{}
-// @Router /api/v1/shortLinkGroups/{id} [put]
-func (h *shortLinkGroupsHandler) UpdateByID(c *gin.Context) {
-	//_, id, isAbort := getShortLinkGroupIDFromPath(c)
-	//if isAbort {
-	//	response.Error(c, ecode.InvalidParams)
-	//	return
-	//}
-	//
-	//form := &types.UpdateShortLinkGroupByIDRequest{}
-	//err := c.ShouldBindJSON(form)
-	//if err != nil {
-	//	logger.Warn("ShouldBindJSON error: ", logger.Err(err), middleware.GCtxRequestIDField(c))
-	//	response.Error(c, ecode.InvalidParams)
-	//	return
-	//}
-	//form.ID = id
-	//
-	//shortLinkGroups := &model.ShortLinkGroup{}
-	//err = copier.Copy(shortLinkGroups, form)
-	//if err != nil {
-	//	response.Error(c, ecode.ErrUpdateByIDShortLinkGroup)
-	//	return
-	//}
-	//
-	//ctx := middleware.WrapCtx(c)
-	//err = h.iDao.UpdateByID(ctx, shortLinkGroups)
-	//if err != nil {
-	//	logger.Error("UpdateByID error", logger.Err(err), logger.Any("form", form), middleware.GCtxRequestIDField(c))
-	//	response.Output(c, ecode.InternalServerError.ToHTTPCode())
-	//	return
-	//}
-	//
-	//response.Success(c)
-	panic("implement me")
-
 }
 
 // GetByID get a record by id
@@ -319,104 +354,15 @@ func (h *shortLinkGroupsHandler) GetByCondition(c *gin.Context) {
 	//response.Success(c, gin.H{"shortLinkGroups": data})
 }
 
-// ListByIDs list of records by batch id
-// @Summary list of shortLinkGroups by batch id
-// @Description list of shortLinkGroups by batch id
-// @Tags shortLinkGroups
-// @Param data body types.ListShortLinkGroupByIDsRequest true "id array"
-// @Accept json
-// @Produce json
-// @Success 200 {object} types.ListShortLinkGroupByIDsRespond{}
-// @Router /api/v1/shortLinkGroups/list/ids [post]
-func (h *shortLinkGroupsHandler) ListByIDs(c *gin.Context) {
-	panic("implement me")
-
-	//form := &types.ListShortLinkGroupByIDsRequest{}
-	//err := c.ShouldBindJSON(form)
-	//if err != nil {
-	//	logger.Warn("ShouldBindJSON error: ", logger.Err(err), middleware.GCtxRequestIDField(c))
-	//	response.Error(c, ecode.InvalidParams.WithOutMsg("参数错误"), "详细错误信息")
-	//	response.Output(c, ecode.Unauthorized.WithOutMsg("错误简单描述").ToHTTPCode(), "详细错误信息")
-	//	return
-	//}
-	//
-	//ctx := middleware.WrapCtx(c)
-	//shortLinkGroupsMap, err := h.iDao.GetByIDs(ctx, form.IDs)
-	//if err != nil {
-	//	logger.Error("GetByIDs error", logger.Err(err), logger.Any("form", form), middleware.GCtxRequestIDField(c))
-	//	response.Output(c, ecode.InternalServerError.ToHTTPCode())
-	//	return
-	//}
-	//
-	//shortLinkGroups := []*types.ShortLinkGroupObjDetail{}
-	//for _, id := range form.IDs {
-	//	if v, ok := shortLinkGroupsMap[id]; ok {
-	//		record, err := convertShortLinkGroup(v)
-	//		if err != nil {
-	//			response.Error(c, ecode.ErrListShortLinkGroup)
-	//			return
-	//		}
-	//		shortLinkGroups = append(shortLinkGroups, record)
-	//	}
-	//}
-	//
-	//response.Success(c, gin.H{
-	//	"shortLinkGroups": shortLinkGroups,
-	//})
-}
-
-// ListByLastID get records by last id and limit
-// @Summary list of shortLinkGroups by last id and limit
-// @Description list of shortLinkGroups by last id and limit
-// @Tags shortLinkGroups
-// @accept json
-// @Produce json
-// @Param lastID query int true "last id, default is MaxInt64"
-// @Param limit query int false "size in each page" default(10)
-// @Param sort query string false "sort by column name of table, and the "-" sign before column name indicates reverse order" default(-id)
-// @Success 200 {object} types.ListShortLinkGroupRespond{}
-// @Router /api/v1/shortLinkGroups/list [get]
-func (h *shortLinkGroupsHandler) ListByLastID(c *gin.Context) {
-	panic("implement me")
-
-	//lastID := utils.StrToUint64(c.Query("lastID"))
-	//if lastID == 0 {
-	//	lastID = math.MaxInt64
-	//}
-	//limit := utils.StrToInt(c.Query("limit"))
-	//if limit == 0 {
-	//	limit = 10
-	//}
-	//sort := c.Query("sort")
-	//
-	//ctx := middleware.WrapCtx(c)
-	//shortLinkGroups, err := h.iDao.GetByLastID(ctx, lastID, limit, sort)
-	//if err != nil {
-	//	logger.Error("GetByLastID error", logger.Err(err), logger.Uint64("latsID", lastID), logger.Int("limit", limit), middleware.GCtxRequestIDField(c))
-	//	response.Output(c, ecode.InternalServerError.ToHTTPCode())
-	//	return
-	//}
-	//
-	//data, err := convertShortLinkGroup(shortLinkGroups)
-	//if err != nil {
-	//	response.Error(c, ecode.ErrListByLastIDShortLinkGroup)
-	//	return
-	//}
-	//
-	//response.Success(c, gin.H{
-	//	"shortLinkGroups": data,
-	//})
-}
-
-func getShortLinkGroupIDFromPath(c *gin.Context) (string, uint64, bool) {
-	idStr := c.Param("id")
-	id, err := utils.StrToUint64E(idStr)
+func getShortLinkGroupIDFromPath(c *gin.Context) (string, int, error) {
+	gidStr := c.Param("gid")
+	id, err := strconv.Atoi(gidStr)
 	if err != nil || id == 0 {
-		logger.Warn("StrToUint64E error: ", logger.String("idStr", idStr), middleware.GCtxRequestIDField(c))
-		return "", 0, true
+		err = errors.Wrap(err, "参数错误")
+		return "", 0, err
 	}
 
-	return idStr, id, false
+	return gidStr, id, nil
 }
 
 func convertShortLinkGroup(shortLinkGroups *model.ShortLinkGroup) (*types.ShortLinkGroupObjDetail, error) {
@@ -458,4 +404,12 @@ func CheckSort(sort string) bool {
 
 	// 如果没有匹配到任何有效关键字，返回 false
 	return false
+}
+func parseParams(c *gin.Context, form any) bool {
+	err := c.ShouldBindJSON(form)
+	if err != nil {
+		serialize.NewResponse(400, serialize.WithMsg("参数错误"), serialize.WithErr(err)).ToJSON(c)
+		return false
+	}
+	return true
 }

@@ -25,7 +25,7 @@ type ShortLinkGroupDao interface {
 	Create(ctx context.Context, record *model.ShortLinkGroup) error
 	DeleteByID(ctx context.Context, id uint64) error
 	DeleteByIDs(ctx context.Context, ids []uint64) error
-	UpdateByID(ctx context.Context, record *model.ShortLinkGroup) error
+	UpdateByGidAndCUserId(ctx context.Context, record *model.ShortLinkGroup) error
 	GetByID(ctx context.Context, id uint64) (*model.ShortLinkGroup, error)
 	GetByCondition(ctx context.Context, condition *query.Conditions) (*model.ShortLinkGroup, error)
 	GetByIDs(ctx context.Context, ids []uint64) (map[uint64]*model.ShortLinkGroup, error)
@@ -34,7 +34,6 @@ type ShortLinkGroupDao interface {
 
 	CreateByTx(ctx context.Context, tx *gorm.DB, table *model.ShortLinkGroup) (uint64, error)
 	DeleteByTx(ctx context.Context, tx *gorm.DB, id uint64) error
-	UpdateByTx(ctx context.Context, tx *gorm.DB, table *model.ShortLinkGroup) error
 }
 
 type shortLinkGroupsDao struct {
@@ -138,37 +137,29 @@ func (d *shortLinkGroupsDao) DeleteByIDs(ctx context.Context, ids []uint64) erro
 	return nil
 }
 
-// UpdateByID update a record by id
-func (d *shortLinkGroupsDao) UpdateByID(ctx context.Context, table *model.ShortLinkGroup) error {
-	err := d.updateDataByID(ctx, d.db, table)
-
-	// delete cache
-	_ = d.cache.Del(ctx, uint64(table.ID))
-
-	return err
-}
-
-func (d *shortLinkGroupsDao) updateDataByID(ctx context.Context, db *gorm.DB, table *model.ShortLinkGroup) error {
-	if table.ID < 1 {
-		return errors.New("id cannot be 0")
-	}
-
+// UpdateByGidAndCUserId  以gid和c_user为条件更新,由于gid和c_user_id是联合唯一索引，所以只会更新一条记录
+func (d *shortLinkGroupsDao) UpdateByGidAndCUserId(ctx context.Context, table *model.ShortLinkGroup) error {
 	update := map[string]interface{}{}
-
-	if table.Description != "" {
-		update["description"] = table.Description
-	}
-	if table.Gid > 0 {
-		update["gid"] = table.Gid
-	}
 	if table.Name != "" {
 		update["name"] = table.Name
 	}
-	if table.CUserId != "" {
-		update["c_user"] = table.CUserId
+	if table.Description != "" {
+		update["description"] = table.Description
 	}
+	update["updated_at"] = time.Now()
+	tDB := d.db.Where("gid = ? AND c_user_id = ?", table.Gid, table.CUserId).Model(model.ShortLinkGroup{}).Updates(update)
+	err := tDB.Error
+	if tDB.RowsAffected == 0 {
+		return errors.New("no record is updated")
+	}
+	if err != nil {
+		return err
+	}
+	// delete cache
+	//todo 如何去更新缓存
+	_ = d.cache.Del(ctx, uint64(table.ID))
 
-	return db.WithContext(ctx).Model(table).Updates(update).Error
+	return nil
 }
 
 // GetByID get a record by id
@@ -339,14 +330,4 @@ func (d *shortLinkGroupsDao) DeleteByTx(ctx context.Context, tx *gorm.DB, id uin
 	_ = d.cache.Del(ctx, id)
 
 	return nil
-}
-
-// UpdateByTx update a record by id in the database using the provided transaction
-func (d *shortLinkGroupsDao) UpdateByTx(ctx context.Context, tx *gorm.DB, table *model.ShortLinkGroup) error {
-	err := d.updateDataByID(ctx, tx, table)
-
-	// delete cache
-	_ = d.cache.Del(ctx, uint64(table.ID))
-
-	return err
 }
