@@ -12,6 +12,6 @@ func init() {
 }
 func redirectRouter(group *gin.RouterGroup, h handler.RedirectHandler) {
 
-	group.GET("/:short_uri", h.Redirect)
+	group.Any("/:short_uri", h.Redirect)
 
 }
