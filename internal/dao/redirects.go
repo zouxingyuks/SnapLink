@@ -7,10 +7,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
 	cacheBase "github.com/zhufuyi/sponge/pkg/cache"
 	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
+	"slices"
 )
 
 var _ RedirectsDao = (*redirectsDao)(nil)
@@ -18,6 +18,8 @@ var _ RedirectsDao = (*redirectsDao)(nil)
 // RedirectsDao defining the dao interface
 type RedirectsDao interface {
 	GetByURI(ctx context.Context, uri string) (*cache.RedirectInfo, error)
+	WarmUp(ctx context.Context)
+	CleanUp(ctx context.Context)
 }
 
 type redirectsDao struct {
@@ -70,6 +72,9 @@ func (d *redirectsDao) GetByURI(ctx context.Context, uri string) (*cache.Redirec
 			// 根据 gid 获取对应的分表
 			info := &cache.RedirectInfo{
 				OriginalURL: shortLink.OriginUrl,
+				Gid:         shortLink.Gid,
+				Uri:         shortLink.Uri,
+				Clicks:      shortLink.Clicks,
 			}
 			// set cache
 			err = d.cache.Set(ctx, uri, info, cache.RedirectsExpireTime)
@@ -92,4 +97,49 @@ func (d *redirectsDao) GetByURI(ctx context.Context, uri string) (*cache.Redirec
 
 	// 快速失败，如果是其他错误，直接返回
 	return nil, err
+}
+
+// WarmUp 缓存预热
+// 将 lua 脚本存于数据库中，以此实现动态修改缓存预热方案
+func (d *redirectsDao) WarmUp(ctx context.Context) {
+	// 获取访问量最多的 100 条记录设置为永久缓存
+	var records []cache.RedirectInfo
+	for i := 0; i < 25; i++ {
+		// 获取访问量最多的 100 条记录
+		var rows []cache.RedirectInfo
+		d.db.WithContext(ctx).Raw(fmt.Sprintf(`SELECT origin_url , gid , uri, clicks FROM short_link_%d WHERE enable = 1 ORDER BY clicks DESC LIMIT 100`, i)).Scan(&rows)
+		records = append(records, rows...)
+	}
+	//todo 配置化处理
+	slices.SortFunc(records, func(a, b cache.RedirectInfo) int {
+		if a.Clicks > b.Clicks {
+			return -1
+		} else if a.Clicks == b.Clicks {
+			return 0
+		} else {
+			return 1
+		}
+	})
+	l := len(records)
+	// 将这些记录设置为永久缓存
+	for i := 0; i < 100 && i < l; i++ {
+		info := &cache.RedirectInfo{
+			OriginalURL: records[i].OriginalURL,
+			Gid:         records[i].Gid,
+			Uri:         records[i].Uri,
+			Clicks:      records[i].Clicks,
+		}
+		// set cache
+		err := d.cache.Set(ctx, records[i].Uri, info, cache.RedirectsNeverExpireTime)
+		if err != nil {
+			fmt.Printf("cache.Set error: %v, uri=%s", err, records[i].Uri)
+		}
+	}
+}
+
+// CleanUp 缓存清理
+// 1. 定时清理过期缓存
+// 2. 定时将永久缓存转换为短期缓存，然后重新进行缓存预热
+func (d *redirectsDao) CleanUp(ctx context.Context) {
+
 }
