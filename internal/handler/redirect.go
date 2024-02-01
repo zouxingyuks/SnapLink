@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"SnapLink/assets"
 	"SnapLink/internal/cache"
 	"SnapLink/internal/dao"
 	"SnapLink/internal/model"
@@ -46,6 +47,10 @@ func (h *redirectHandler) Redirect(c *gin.Context) {
 			serialize.WithMsg("请求失败"),
 			serialize.WithErr(err),
 		).ToJSON(c)
+		return
+	}
+	if info.OriginalURL == "" {
+		c.HTML(200, assets.Path("html/page_not_found.html"), gin.H{})
 		return
 	}
 	// 进行重定向
