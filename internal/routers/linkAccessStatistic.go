@@ -8,6 +8,7 @@ import (
 type LinkAccessStatisticHandler interface {
 	GetStatistic(c *gin.Context)
 	GetRecords(c *gin.Context)
+	RefreshStatistic(c *gin.Context)
 }
 
 func init() {
@@ -20,4 +21,6 @@ func linkAccessStatisticRouter(group *gin.RouterGroup, h LinkAccessStatisticHand
 	group.GET("/linkAccessStatistic", h.GetStatistic)
 	//获取单次访问详情
 	group.GET("/linkAccessStatistic/detail", h.GetRecords)
+	//立刻更新最新的访问统计数据
+	group.POST("/linkAccessStatistic/update", h.RefreshStatistic)
 }
