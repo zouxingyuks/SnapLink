@@ -16,12 +16,13 @@ import (
 // 根据对应的id 进行更新
 
 type LinkStatsCache interface {
-	Get(ctx context.Context, originalUrl string, date string, hour int) (*model.LinkAccessStat, error)
+	Get(ctx context.Context, originalUrl string, date string, hour int) (*model.LinkAccessStatistic, error)
 	Set(ctx context.Context, values map[string]any) error
-	GetByDateHour(ctx context.Context, date string, hour int) ([]*model.LinkAccessStat, error)
+	GetByDateHour(ctx context.Context, date string, hour int) ([]*model.LinkAccessStatistic, error)
 	UpdateUip(ctx context.Context, originalUrl string, date string, hour int, ip string) error
 	UpdateUv(ctx context.Context, originalUrl string, date string, hour int) error
 	UpdatePv(ctx context.Context, originalUrl string, date string, hour int) error
+	GetRecord(ctx context.Context, originalUrl string, date string, hour int) (*model.LinkAccessRecord, error)
 }
 
 type LinkStatsDao struct {
@@ -39,15 +40,71 @@ func NewLinkStatsDao(xCache LinkStatsCache) *LinkStatsDao {
 	}
 }
 
-// Get get a record by originalUrl, date and hour
-func (d *LinkStatsDao) Get(ctx context.Context, originalUrl string, date string, hour int) (*model.LinkAccessStat, error) {
-	return d.cache.Get(ctx, originalUrl, date, hour)
+// GetStatistic 获取访问统计
+func (d *LinkStatsDao) GetStatistic(ctx context.Context, uri string, startDatetime, endDatetime string, pageNum, pageSize uint64) ([]model.LinkAccessStatistic, error) {
+	//todo 基于缓存的设计
+	//todo 调整查询表
+	statiscs := []model.LinkAccessStatistic{}
+	//todo 拓展信息的查询
+	//使用此方法在多次查询时，只会进行一次 join 查询
+	err := d.db.
+		Table(model.LinkAccessStatistic{}.TName()).
+		WithContext(ctx).
+		Where("uri = ?  and timestampdiff(SECOND,datetime,?) <= 0 and timestampdiff(SECOND,datetime,?) >= 0", uri, startDatetime, endDatetime).
+		Order("datetime desc").
+		Offset(int((pageNum - 1) * pageSize)).
+		Limit(int(pageSize)).
+		Find(&statiscs).Error
+	return statiscs, err
+}
+
+// GetRecord 获取访问记录
+// 根据原始链接和时间来去精准查询
+func (d *LinkStatsDao) GetRecord(ctx context.Context, uri string, startDatetime, endDatetime string, pageNum, pageSize uint64) ([]model.LinkAccessRecord, error) {
+	//todo 基于缓存的设计
+	//todo  如何多表查询下的高性能设计
+	records := []model.LinkAccessRecord{}
+	//todo 调整查询表
+	err := d.db.
+		Table(model.LinkAccessRecord{}.
+			TName()).
+		WithContext(ctx).
+		Where("uri = ?  and timestampdiff(SECOND,datetime,?) <= 0 and timestampdiff(SECOND,datetime,?) >= 0", uri, startDatetime, endDatetime).
+		Order("datetime desc").
+		Offset(int((pageNum - 1) * pageSize)).
+		Limit(int(pageSize)).
+		Find(&records).Error
+	return records, err
+
+}
+
+// UpdateUip 更新IP访问量
+func (d *LinkStatsDao) UpdateUip(ctx context.Context, originalUrl string, date string, hour int, ip string) error {
+	//TODO 需要考虑缓存失效情况下的处理
+	return d.cache.UpdateUip(ctx, originalUrl, date, hour, ip)
+}
+
+// UpdateUv 更新UV访问量
+func (d *LinkStatsDao) UpdateUv(ctx context.Context, originalUrl string, date string, hour int) error {
+	return d.cache.UpdateUv(ctx, originalUrl, date, hour)
+}
+
+// UpdatePv 更新PV访问量
+func (d *LinkStatsDao) UpdatePv(ctx context.Context, originalUrl string, date string, hour int) error {
+	return d.cache.UpdatePv(ctx, originalUrl, date, hour)
+}
+
+// SaveAccessRecord 保存访问记录
+func (d *LinkStatsDao) SaveAccessRecord(ctx context.Context, record *model.LinkAccessRecord) error {
+	//TODO 考虑如何进行二次更改
+	err := d.db.Table(record.TName()).WithContext(ctx).Create(record).Error
+	return err
 }
 
 // Set
 // 由于缓存的原因，这里需要将数据存储到缓存中
 // 由于此数据是写多读少的数据，所以采用定时任务的方式进行数据的更新
-func (d *LinkStatsDao) Set(ctx context.Context, data *model.LinkAccessStat) error {
+func (d *LinkStatsDao) Set(ctx context.Context, data *model.LinkAccessStatistic) error {
 	m := make(map[string]interface{})
 	bytes, err := json.Marshal(data)
 	if err != nil {
@@ -65,7 +122,7 @@ func (d *LinkStatsDao) Set(ctx context.Context, data *model.LinkAccessStat) erro
 }
 
 // Save 更新一或多条记录到数据库
-func (d *LinkStatsDao) Save(ctx context.Context, data []*model.LinkAccessStat) error {
+func (d *LinkStatsDao) Save(ctx context.Context, data []*model.LinkAccessStatistic) error {
 	//更新缓存
 	err := d.db.WithContext(ctx).Save(data).Error
 	if err != nil {
@@ -99,17 +156,4 @@ func cronTask(ctx context.Context, d *LinkStatsDao) {
 			}
 		}
 	}
-}
-
-func (d *LinkStatsDao) UpdateUip(ctx context.Context, originalUrl string, date string, hour int, ip string) error {
-	//TODO 需要考虑缓存失效情况下的处理
-	return d.cache.UpdateUip(ctx, originalUrl, date, hour, ip)
-}
-
-func (d *LinkStatsDao) UpdateUv(ctx context.Context, originalUrl string, date string, hour int) error {
-	return d.cache.UpdateUv(ctx, originalUrl, date, hour)
-}
-
-func (d *LinkStatsDao) UpdatePv(ctx context.Context, originalUrl string, date string, hour int) error {
-	return d.cache.UpdatePv(ctx, originalUrl, date, hour)
 }
