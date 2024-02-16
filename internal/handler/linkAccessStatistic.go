@@ -7,11 +7,13 @@ import (
 	"context"
 	"github.com/gin-gonic/gin"
 	"strconv"
+	"time"
 )
 
 type LinkAccessStatisticDao interface {
 	GetStatistic(ctx context.Context, uri string, startDatetime, endDatetime string, pageNum, pageSize uint64) ([]model.LinkAccessStatistic, error)
 	GetRecord(ctx context.Context, uri string, startDatetime, endDatetime string, pageNum, pageSize uint64) ([]model.LinkAccessRecord, error)
+	SaveToDB(ctx context.Context, uri string, date string, hour int) error
 }
 type LinkAccessStatisticHandler struct {
 	iDao LinkAccessStatisticDao
@@ -103,4 +105,34 @@ func (h *LinkAccessStatisticHandler) GetRecords(c *gin.Context) {
 	//todo 查询数据
 	//返回数据
 	c.JSON(200, record)
+}
+
+// RefreshStatistic 立刻更新最新的访问统计数据
+// @Summary 立刻更新最新的访问统计数据
+// @Description 立刻更新最新的访问统计数据
+// @Tags LinkAccessStatistic
+// @Accept json
+// @Produce json
+// @Param uri query string true "uri"
+// @Success 200 {string} string "success"
+// @Router /linkAccessStatistic/update [post]
+func (h *LinkAccessStatisticHandler) RefreshStatistic(c *gin.Context) {
+	//参数获取与校验
+	uri := c.Query("uri")
+	if uri == "" {
+		//todo 日志设计
+		c.JSON(400, gin.H{"error": "uri is required"})
+		return
+	}
+	date := time.Now().Format("2006-01-02")
+	hour := time.Now().Hour()
+	err := h.iDao.SaveToDB(c, uri, date, hour)
+	if err != nil {
+		//todo 日志设计
+		c.JSON(500, gin.H{"error": "get data error"})
+		return
+	}
+
+	//返回数据
+	c.JSON(200, "success")
 }
