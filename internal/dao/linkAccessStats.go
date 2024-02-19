@@ -60,28 +60,36 @@ func (d *LinkAccessStatisticDao) GetStatistic(ctx context.Context, uri string, s
 
 // GetStatisticByDay
 // order format: a desc,b asc
-func (d *LinkAccessStatisticDao) GetStatisticByDay(ctx context.Context, uri string, date string, order string) (model.LinkAccessStatisticDay, error) {
-	var data model.LinkAccessStatisticDay
-	row := d.db.WithContext(ctx).Table(model.LinkAccessStatistic{}.TName()).
+func (d *LinkAccessStatisticDao) GetStatisticByDay(ctx context.Context, uri string, startDate, endDate string, order string, pageNum, pageSize uint64) ([]model.LinkAccessStatisticDay, error) {
+	var datas []model.LinkAccessStatisticDay
+	tx := d.db.WithContext(ctx).Table(model.LinkAccessStatistic{}.TName()).
 		Select("uri",
 			"date",
 			"SUM(pv) AS today_pv",
 			"SUM(uv) AS today_uv",
 			"SUM(uip) AS today_uip").
-		Where("uri = ? AND date = ?", uri, date).
+		Where("DATEDIFF( date, ? ) >= 0", startDate).
+		Where("DATEDIFF( date, ? ) <= 0", endDate).
 		Group("uri,date").
-		Order(order).Row()
-	if err := row.Err(); err != nil {
-		panic(err)
+		Order(order).
+		Offset(int((pageNum - 1) * pageSize)).
+		Limit(int(pageSize))
+	if uri != "" {
+		tx.Where("uri = ?", uri)
 	}
-	//显示查询语句
-	err := row.Scan(&data.URI, &data.CreatedAt, &data.TodayPv, &data.TodayUv, &data.TodayUip)
+	rows, err := tx.Rows()
 	if err != nil {
 		panic(err)
 	}
+	defer rows.Close()
+	//显示查询语句
+	for rows.Next() {
+		data := new(model.LinkAccessStatisticDay)
+		d.db.ScanRows(rows, data)
+		datas = append(datas, *data)
+	}
 	//处理 created_at 格式为日期
-	data.Date = data.CreatedAt.Format("2006-01-02")
-	return data, nil
+	return datas, nil
 }
 
 // GetRecord 获取访问记录
