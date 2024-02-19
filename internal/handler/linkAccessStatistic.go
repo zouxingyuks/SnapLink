@@ -14,6 +14,7 @@ type LinkAccessStatisticDao interface {
 	GetStatistic(ctx context.Context, uri string, startDatetime, endDatetime string, pageNum, pageSize uint64) ([]model.LinkAccessStatistic, error)
 	GetRecord(ctx context.Context, uri string, startDatetime, endDatetime string, pageNum, pageSize uint64) ([]model.LinkAccessRecord, error)
 	SaveToDB(ctx context.Context, uri string, date string, hour int) error
+	GetStatisticByDay(ctx context.Context, uri string, date string, order string) (model.LinkAccessStatisticDay, error)
 }
 type LinkAccessStatisticHandler struct {
 	iDao LinkAccessStatisticDao
@@ -21,7 +22,7 @@ type LinkAccessStatisticHandler struct {
 
 func NewLinkAccessStatisticHandler() *LinkAccessStatisticHandler {
 	h := &LinkAccessStatisticHandler{
-		iDao: dao.NewLinkStatsDao(
+		iDao: dao.NewLinkAccessStatisticDao(
 			cache.NewLinkStatsCache(model.GetCacheType())),
 	}
 	return h
@@ -99,7 +100,7 @@ func (h *LinkAccessStatisticHandler) GetRecords(c *gin.Context) {
 	record, err := h.iDao.GetRecord(c, uri, startDatetime, endDatetime, page, pageSize)
 	if err != nil {
 		//todo 日志设计
-		c.JSON(500, gin.H{"error": "get data error"})
+		c.JSON(500, gin.H{"error": err})
 		return
 	}
 	//todo 查询数据
@@ -129,10 +130,50 @@ func (h *LinkAccessStatisticHandler) RefreshStatistic(c *gin.Context) {
 	err := h.iDao.SaveToDB(c, uri, date, hour)
 	if err != nil {
 		//todo 日志设计
-		c.JSON(500, gin.H{"error": "get data error"})
+		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
 
 	//返回数据
 	c.JSON(200, "success")
+}
+
+// GetStatisticByDay
+// @Summary 获取单日的访问统计
+// @Description 获取单日的访问统计
+// @Tags LinkAccessStatistic
+// @Accept json
+// @Produce json
+// @Param uri query string true "uri"
+// @Param date query string true "开始日期,format:2006-01-02 "
+// @Param order query string false "排序方式,可选有 asc,desc,默认为desc"
+// @Success 200 {object} model.LinkAccessStatisticDay
+// @Router /linkAccessStatistic/day [get]
+func (h *LinkAccessStatisticHandler) GetStatisticByDay(c *gin.Context) {
+	uri := c.Query("uri")
+	if uri == "" {
+		c.JSON(400, gin.H{
+			"err": "uri param err",
+		})
+		return
+	}
+	date, err := time.Parse("2006-01-02", c.Query("date"))
+	if err != nil {
+		c.JSON(400, gin.H{
+			"err": "time param format err",
+		})
+		return
+	}
+	order := c.Query("order")
+	if order == "" {
+		order = "date desc"
+	}
+	data, err := h.iDao.GetStatisticByDay(c, uri, date.Format("2006-01-02"), order)
+	if err != nil {
+		c.JSON(500, gin.H{
+			"err": err.Error(),
+		})
+		return
+	}
+	c.JSON(200, data)
 }
