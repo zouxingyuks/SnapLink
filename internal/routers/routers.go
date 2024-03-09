@@ -1,4 +1,4 @@
-package router
+package routers
 
 import (
 	"net/http"
@@ -23,7 +23,7 @@ import (
 
 var (
 	// V1 版本的路由函数
-	apiV1RouterFns []func(r *gin.RouterGroup) // group router functions
+	apiV1RouterFns []func(r *gin.RouterGroup) // group routers functions
 )
 
 // NewRouter 新建路由
@@ -92,7 +92,7 @@ func NewRouter() *gin.Engine {
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// register routers, middleware support
-	registerRouters(r, "/api/v1", apiV1RouterFns)
+	registerRouters(r, "/api/short-link/admin/v1", apiV1RouterFns)
 	// 如果还有其他版本的路由，在此处添加
 	// example:
 	//    registerRouters(r, "/api/v2", apiV2RouteFns, middleware.Auth())
