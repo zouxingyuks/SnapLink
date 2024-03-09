@@ -5,11 +5,11 @@ import (
 	"SnapLink/internal/dao"
 	"SnapLink/internal/ecode"
 	"SnapLink/internal/model"
+	"SnapLink/internal/types"
 	"SnapLink/pkg/serialize"
 	"context"
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
-	"github.com/zhufuyi/sponge/pkg/ggorm/query"
 	"github.com/zhufuyi/sponge/pkg/gin/middleware"
 )
 
@@ -59,6 +59,7 @@ func getTUserUsernameFromPath(c *gin.Context) string {
 // @Accept application/json
 // @Produce application/json
 // @Param username path string true "用户名"
+// todo 此接口需要权限认证，且需要高级权限认证
 func (h *UsersHandler) GetByUsername(c *gin.Context) {
 	username := getTUserUsernameFromPath(c)
 	if username == "" {
@@ -66,26 +67,45 @@ func (h *UsersHandler) GetByUsername(c *gin.Context) {
 		return
 
 	}
-
 	ctx := middleware.WrapCtx(c)
-	queryParams := &query.Params{
-		Page: 0,
-		Size: 1,
-		Columns: []query.Column{
-			{
-				Name:  "username",
-				Exp:   "like",
-				Value: username,
-			},
-		},
-	}
-	users, num, err := h.iDao.GetByColumns(ctx, queryParams)
-	if err != nil || num == 0 {
+	user, err := h.iDao.GetByUsername(ctx, username)
+	if err != nil {
 		serialize.NewResponseWithErrCode(ecode.UserNotExistError, serialize.WithErr(err)).ToJSON(c)
 		return
 	}
 
-	serialize.NewResponse(200, serialize.WithData(users)).ToJSON(c)
+	serialize.NewResponse(200, serialize.WithData(user)).ToJSON(c)
+}
+
+// GetByUsernameDesensitization 根据用户名查找用户信息(脱敏)
+// @Summary 根据用户名查找用户信息(脱敏)
+// @Description 根据用户名查找用户信息(脱敏)
+// @Tags users
+// @Accept application/json
+// @Produce application/json
+// @Param username path string true "用户名"
+// todo 数据脱敏
+func (h *UsersHandler) GetByUsernameDesensitization(c *gin.Context) {
+	username := getTUserUsernameFromPath(c)
+	if username == "" {
+		serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithErr(errors.New("username is null"))).ToJSON(c)
+		return
+
+	}
+	ctx := middleware.WrapCtx(c)
+	user, err := h.iDao.GetByUsername(ctx, username)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.UserNotExistError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	//数据脱敏
+	userDesensitization := types.GetByUsernameDesensitizationRespond{
+		Username: user.Username,
+		RealName: user.RealName,
+		Phone:    user.Phone,
+		Mail:     user.Mail,
+	}
+	serialize.NewResponse(200, serialize.WithData(userDesensitization)).ToJSON(c)
 }
 
 // HasUsername 判断用户名是否存在
@@ -112,11 +132,6 @@ func (h *UsersHandler) HasUsername(c *gin.Context) {
 		return
 	}
 	serialize.NewResponse(200, serialize.WithData(result)).ToJSON(c)
-}
-
-func (h *UsersHandler) GetByUsernameDesensitization(c *gin.Context) {
-	//TODO implement me
-	panic("implement me")
 }
 
 func (h *UsersHandler) Register(c *gin.Context) {
