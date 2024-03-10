@@ -31,7 +31,7 @@ func NewUsersHandler() (h *UsersHandler) {
 
 func (h *UsersHandler) makeUsernameBF() {
 	//todo 此处改为远程配置
-	err := cache.Create(context.Background(), "username", 0.001, 1e9)
+	err := cache.BFCreate(context.Background(), "username", 0.001, 1e9)
 	// 如果创建失败，说明已经存在，正常结束即可
 	// 如果创建成功，说明不存在，需要添加数据
 	if err == nil {
@@ -43,7 +43,7 @@ func (h *UsersHandler) makeUsernameBF() {
 			panic(errors.Wrap(err, "get all username from db error"))
 		}
 		// 将所有的用户名添加到布隆过滤器中
-		err = cache.MAdd(context.Background(), "username", usernames...)
+		err = cache.BFMAdd(context.Background(), "username", usernames...)
 	}
 }
 
@@ -180,9 +180,23 @@ func (h *UsersHandler) Register(c *gin.Context) {
 	//6. 注册用户
 	err = h.iDao.Create(ctx, u)
 	if err != nil {
+		//布隆过滤器的漏网之鱼
+
+		if dao.DuplicateEntry.Is(err) {
+			serialize.NewResponseWithErrCode(ecode.UserNameExistError, serialize.WithErr(err)).ToJSON(c)
+			cache.BFAdd(ctx, "username", u.Username)
+			return
+		}
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
 		return
 	}
+	//7. 加入布隆过滤器
+	err = cache.BFAdd(ctx, "username", u.Username)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	//返回注册信息
 	serialize.NewResponse(200, serialize.WithData(types.RegisterRespond{
 		Username: u.Username,
 		RealName: u.RealName,
