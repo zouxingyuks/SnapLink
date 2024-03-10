@@ -476,7 +476,7 @@ func (d *tUserDao) HasUsername(ctx context.Context, username string) (bool, erro
 	if err != nil {
 		//如果err 是 record not found
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return true, nil
+			return false, nil
 		}
 		return true, err
 	}
