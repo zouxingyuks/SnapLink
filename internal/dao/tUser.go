@@ -466,6 +466,10 @@ func (d *tUserDao) HasUsername(ctx context.Context, username string) (bool, erro
 	//2. 在数据库中查询
 	u, err := d.GetByUsername(ctx, username)
 	if err != nil {
+		//如果err 是 record not found
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return true, nil
+		}
 		return true, err
 	}
 	if u == nil {
