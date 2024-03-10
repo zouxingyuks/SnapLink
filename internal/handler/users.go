@@ -343,7 +343,13 @@ func (h *UsersHandler) CheckLogin(c *gin.Context) {
 	serialize.NewResponse(200, serialize.WithData(true)).ToJSON(c)
 }
 
+// Logout
+// @Summary 用户登出
+// @Description 用户登出
+// @Tags users
+// @Accept application/json
+// @Produce application/json
 func (h *UsersHandler) Logout(c *gin.Context) {
-	//TODO implement me
-	panic("implement me")
+	//todo 此处需要将token加入黑名单
+	c.JSON(200, "ok")
 }
