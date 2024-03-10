@@ -125,7 +125,7 @@ func (h *UsersHandler) HasUsername(c *gin.Context) {
 	ctx := middleware.WrapCtx(c)
 	has, err := h.iDao.HasUsername(ctx, username)
 	result := gin.H{
-		"success": has,
+		"success": !has,
 	}
 	if err != nil {
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithData(result), serialize.WithErr(err)).ToJSON(c)
@@ -134,9 +134,61 @@ func (h *UsersHandler) HasUsername(c *gin.Context) {
 	serialize.NewResponse(200, serialize.WithData(result)).ToJSON(c)
 }
 
+// Register 用户注册
+// @Summary 用户注册
+// @Description 用户注册
+// @Tags users
+// @Accept application/json
+// @Produce application/json
+// @Param username body string true "用户名"
+// @Param password body string true "密码"
+// @Param realName body string true "真实姓名"
+// @Param phone body string true "手机号"
+// @Param mail body string true "邮箱"
 func (h *UsersHandler) Register(c *gin.Context) {
-	//TODO implement me
-	panic("implement me")
+	form := new(types.RegisterRequest)
+	if err := c.ShouldBindJSON(form); err != nil {
+		serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	//1. 检测用户名是否合法
+	ctx := middleware.WrapCtx(c)
+	has, err := h.iDao.HasUsername(ctx, form.Username)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	if has {
+		serialize.NewResponseWithErrCode(ecode.UserNameExistError, serialize.WithErr(errors.New("username exist"))).ToJSON(c)
+		return
+	}
+	//todo 剩余的信息校验
+	//2. 检测真实姓名是否合法
+	//3. 检测密码是否合法
+	//4. 检测手机号是否合法
+	//5. 检测邮箱是否合法
+	//todo 注册信息检测:为这几个字段添加布隆过滤器检测
+
+	u := new(model.TUser)
+	u.Username = form.Username
+	//todo 密码加密
+	u.Password = form.Password
+	u.RealName = form.RealName
+	u.Phone = form.Phone
+	u.Mail = form.Mail
+
+	//6. 注册用户
+	err = h.iDao.Create(ctx, u)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	serialize.NewResponse(200, serialize.WithData(types.RegisterRespond{
+		Username: u.Username,
+		RealName: u.RealName,
+		Phone:    u.Phone,
+		Mail:     u.Mail,
+	})).ToJSON(c)
 }
 
 func (h *UsersHandler) UpdateByUsername(c *gin.Context) {
