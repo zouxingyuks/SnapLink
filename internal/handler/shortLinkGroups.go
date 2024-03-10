@@ -14,11 +14,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/jinzhu/copier"
 	"github.com/zhufuyi/sponge/pkg/gin/middleware"
 	"github.com/zhufuyi/sponge/pkg/gin/response"
 	"github.com/zhufuyi/sponge/pkg/logger"
-	"github.com/zhufuyi/sponge/pkg/utils"
 )
 
 var _ ShortLinkGroupHandler = (*shortLinkGroupsHandler)(nil)
@@ -95,49 +93,20 @@ func (h *shortLinkGroupsHandler) Create(c *gin.Context) {
 // @Accept application/json
 // @Produce application/json
 // @param Authorization header string true "token"
-// @Param page body int false "页码"
-// @Param size body int false "每页数量"
-// @Param sort body string false "排序字段"
 // @Success 200 {object} types.ListShortLinkGroupRespond{}
 // @Failure 400 string "{"msg": "参数错误"}"
 // @RedirectInfo /api/v1/slink/group/list [get]
 func (h *shortLinkGroupsHandler) List(c *gin.Context) {
 	//1. 参数解析
-	form := new(types.ListShortLinkGroupRequest)
-	if err := c.ShouldBindJSON(form); err != nil {
-		serialize.NewResponse(400, serialize.WithMsg("参数错误"), serialize.WithErr(err)).ToJSON(c)
+	claims, _ := jwt.ParseToken(c.GetHeader("Authorization")[7:])
+	username := claims.UID
+	ctx := middleware.WrapCtx(c)
+	groups, err := h.iDao.GetAllByCUser(ctx, username)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
 		return
 	}
-	// 默认值
-	if (form.Page+1)*(form.Size) == 0 {
-		form.Page = 0
-		form.Size = 100
-	}
-	panic("implement me")
-	//param := query.Params{
-	//	Page: form.Page,
-	//	Size: form.Size,
-	//	Sort: form.Sort,
-	//	Columns: []query.Column{
-	//		{
-	//			Name:  "c_user_id",
-	//			Value: CUserId,
-	//			Exp:   "like",
-	//		},
-	//	},
-	//}
-	//ctx := middleware.WrapCtx(c)
-	//shortLinkGroups, total, err := h.iDao.GetByColumns(ctx, &param)
-	//if err != nil {
-	//	logger.Error("GetByColumns error", logger.Err(err), logger.Any("param", param), middleware.GCtxRequestIDField(c))
-	//	serialize.NewResponse(500, serialize.WithMsg("查询失败"), serialize.WithErr(err)).ToJSON(c)
-	//	return
-	//}
-	//logger.Info("查询成功", logger.Any("shortLinkGroups", shortLinkGroups), logger.Int64("total", total), middleware.GCtxRequestIDField(c))
-	//serialize.NewResponse(200, serialize.WithMsg("查询成功"), serialize.WithData(gin.H{
-	//	"shortLinkGroups": shortLinkGroups,
-	//	"total":           total,
-	//})).ToJSON(c)
+	serialize.NewResponse(200, serialize.WithData(groups)).ToJSON(c)
 }
 
 // UpdateByGID 根据gid更新短链接分组
@@ -372,29 +341,6 @@ func getShortLinkGroupIDFromPath(c *gin.Context) (string, uint64, error) {
 	}
 
 	return gidStr, id, nil
-}
-
-func convertShortLinkGroup(shortLinkGroups *model.ShortLinkGroup) (*types.ShortLinkGroupObjDetail, error) {
-	data := &types.ShortLinkGroupObjDetail{}
-	err := copier.Copy(data, shortLinkGroups)
-	if err != nil {
-		return nil, err
-	}
-	data.ID = utils.Uint64ToStr(uint64(shortLinkGroups.ID))
-	return data, nil
-}
-
-func convertShortLinkGroups(fromValues []*model.ShortLinkGroup) ([]*types.ShortLinkGroupObjDetail, error) {
-	var toValues []*types.ShortLinkGroupObjDetail
-	for _, v := range fromValues {
-		data, err := convertShortLinkGroup(v)
-		if err != nil {
-			return nil, err
-		}
-		toValues = append(toValues, data)
-	}
-
-	return toValues, nil
 }
 
 func CheckSort(sort string) bool {
