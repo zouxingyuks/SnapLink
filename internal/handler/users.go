@@ -9,6 +9,7 @@ import (
 	"SnapLink/internal/utils"
 	"SnapLink/pkg/serialize"
 	"context"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 	"github.com/zhufuyi/sponge/pkg/gin/middleware"
@@ -207,7 +208,7 @@ func (h *UsersHandler) Register(c *gin.Context) {
 // @Tags users
 // @Accept application/json
 // @Produce application/json
-// @Param token header string true "token"
+// @Param Authorization header string false "token"
 // @Param username body string true "用户名"
 // @Param password body string true "密码"
 func (h *UsersHandler) Login(c *gin.Context) {
@@ -228,7 +229,11 @@ func (h *UsersHandler) Login(c *gin.Context) {
 		return
 	}
 	//2. 检查用户是否登录
-	//todo 此处需要检查用户是否已经登录，如果已经登录，需要返回已经登录的信息
+	token := c.Request.Header.Get("Authorization")
+	if token != "" {
+		c.Get("uid")
+		//todo 如何更优雅的调用
+	}
 	//2. 检测密码是否正确
 	user, err := h.iDao.GetByUsername(ctx, form.Username)
 	if err != nil {
@@ -241,7 +246,7 @@ func (h *UsersHandler) Login(c *gin.Context) {
 		return
 	}
 	//3. 生成token
-	token, err := jwt.GenerateToken(user.Username, "admin")
+	token, err = jwt.GenerateToken(user.Username, "admin")
 	if err != nil {
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(errors.Wrap(err, "generate token error"))).ToJSON(c)
 		return
@@ -253,22 +258,77 @@ func (h *UsersHandler) Login(c *gin.Context) {
 	return
 }
 
-// UpdateByUsername 根据用户名更新用户信息
+// UpdateInfo 根据用户名更新用户信息
 // @Summary 根据用户名更新用户信息
 // @Description 根据用户名更新用户信息
 // @Tags users
 // @Accept application/json
 // @Produce application/json
-// @Param username path string true "用户名"
+// @Param token header string true "token"
 // @Param password body string true "密码"
 // @Param realName body string true "真实姓名"
 // @Param phone body string true "手机号"
 // @Param mail body string true "邮箱"
-// todo 此接口需要权限认证，且需要高级权限认证
-// todo 修改接口设计，不允许修改用户名，只允许修改密码、真实姓名、手机号、邮箱名
-func (h *UsersHandler) UpdateByUsername(c *gin.Context) {
-	//TODO implement me
-	panic("implement me")
+func (h *UsersHandler) UpdateInfo(c *gin.Context) {
+	//能到这步说明token已经验证通过
+	claims, _ := jwt.ParseToken(c.GetHeader("Authorization")[7:])
+
+	form := new(types.UpdateInfoRequest)
+	if err := c.ShouldBind(form); err != nil {
+		serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	// 此处的数据需要手工校验合法性
+	if form.Password != "" {
+		//todo 重新设定密码的合法性校验
+		if !utils.LengthCheck(form.Password, 6, 15) || !utils.InvalidCharCheck(form.Password) {
+			serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithErr(errors.New("password length error"))).ToJSON(c)
+			return
+		}
+	}
+	if form.RealName != "" {
+		if !utils.LengthCheck(form.RealName, 2, 10) {
+			serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithErr(errors.New("realName length error"))).ToJSON(c)
+			return
+		}
+	}
+	if form.Phone != "" {
+		if !utils.IsPhone(form.Phone) {
+			serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithErr(errors.New("phone format error"))).ToJSON(c)
+			return
+		}
+	}
+	if form.Mail != "" {
+		if !utils.IsEmail(form.Mail) {
+			serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithErr(errors.New("mail format error"))).ToJSON(c)
+			return
+		}
+	}
+	ctx := middleware.WrapCtx(c)
+	user := &model.TUser{
+		Username: claims.UID,
+		RealName: form.RealName,
+		Phone:    form.Phone,
+		Mail:     form.Mail,
+	}
+	fmt.Println(*user)
+
+	if form.Password != "" {
+		user.Password = utils.Encrypt(form.Password)
+	}
+	err := h.iDao.Update(ctx, user)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	response := types.UpdateInfoRespond{
+		Username: user.Username,
+		RealName: user.RealName,
+		Phone:    user.Phone,
+		Mail:     user.Mail,
+	}
+	fmt.Println(response)
+	serialize.NewResponse(200, serialize.WithData(response)).ToJSON(c)
 }
 
 // CheckLogin 检查用户是否登录
@@ -280,8 +340,7 @@ func (h *UsersHandler) UpdateByUsername(c *gin.Context) {
 // @Param token header string true "token"
 // @Success 200 {object} string "ok"
 func (h *UsersHandler) CheckLogin(c *gin.Context) {
-	//TODO implement me
-	panic("implement me")
+	serialize.NewResponse(200, serialize.WithData(true)).ToJSON(c)
 }
 
 func (h *UsersHandler) Logout(c *gin.Context) {
