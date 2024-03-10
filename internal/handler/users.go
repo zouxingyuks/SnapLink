@@ -152,7 +152,7 @@ func (h *UsersHandler) Register(c *gin.Context) {
 		serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithErr(err)).ToJSON(c)
 		return
 	}
-	//1. 检测用户名是否合法
+	//1. 检测用户名是否存在
 	ctx := middleware.WrapCtx(c)
 	has, err := h.iDao.HasUsername(ctx, form.Username)
 	if err != nil {
@@ -163,11 +163,6 @@ func (h *UsersHandler) Register(c *gin.Context) {
 		serialize.NewResponseWithErrCode(ecode.UserNameExistError, serialize.WithErr(errors.New("username exist"))).ToJSON(c)
 		return
 	}
-	//todo 剩余的信息校验
-	//2. 检测真实姓名是否合法
-	//3. 检测密码是否合法
-	//4. 检测手机号是否合法
-	//5. 检测邮箱是否合法
 	//todo 注册信息检测:为这几个字段添加布隆过滤器检测
 	u := &model.TUser{
 		Username: form.Username,
@@ -205,11 +200,6 @@ func (h *UsersHandler) Register(c *gin.Context) {
 	})).ToJSON(c)
 }
 
-func (h *UsersHandler) UpdateByUsername(c *gin.Context) {
-	//TODO implement me
-	panic("implement me")
-}
-
 // Login 用户登录
 // @Summary 用户登录
 // @Description 用户登录
@@ -220,8 +210,53 @@ func (h *UsersHandler) UpdateByUsername(c *gin.Context) {
 // @Param username body string true "用户名"
 // @Param password body string true "密码"
 func (h *UsersHandler) Login(c *gin.Context) {
+	form := new(types.LoginRequest)
+	if err := c.ShouldBindJSON(form); err != nil {
+		serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	//1. 检测用户名是否存在
+	ctx := middleware.WrapCtx(c)
+	has, err := h.iDao.HasUsername(ctx, form.Username)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	if !has {
+		serialize.NewResponseWithErrCode(ecode.UserNotExistError, serialize.WithErr(errors.New("username not exist"))).ToJSON(c)
+		return
+	}
+	//2. 检测密码是否正确
+	user, err := h.iDao.GetByUsername(ctx, form.Username)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	err = utils.Compare(user.Password, form.Password)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.PasswordVerifyError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	//3. 生成token
+	//todo 生成token
+}
+
+// UpdateByUsername 根据用户名更新用户信息
+// @Summary 根据用户名更新用户信息
+// @Description 根据用户名更新用户信息
+// @Tags users
+// @Accept application/json
+// @Produce application/json
+// @Param username path string true "用户名"
+// @Param password body string true "密码"
+// @Param realName body string true "真实姓名"
+// @Param phone body string true "手机号"
+// @Param mail body string true "邮箱"
+// todo 此接口需要权限认证，且需要高级权限认证
+// todo 修改接口设计，不允许修改用户名，只允许修改密码、真实姓名、手机号、邮箱名
+func (h *UsersHandler) UpdateByUsername(c *gin.Context) {
 	//TODO implement me
-	c.JSON(200, gin.H{})
+	panic("implement me")
 }
 
 func (h *UsersHandler) CheckLogin(c *gin.Context) {
