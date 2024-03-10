@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 	"github.com/zhufuyi/sponge/pkg/gin/middleware"
+	"github.com/zhufuyi/sponge/pkg/jwt"
 )
 
 type UsersHandler struct {
@@ -144,7 +145,7 @@ func (h *UsersHandler) HasUsername(c *gin.Context) {
 // @Param username body string true "用户名"
 // @Param password body string true "密码"
 // @Param realName body string true "真实姓名"
-// @Param phone body string true "手机号"
+// @Param phone body string true "手机号,e164格式"
 // @Param mail body string true "邮箱"
 func (h *UsersHandler) Register(c *gin.Context) {
 	form := new(types.RegisterRequest)
@@ -226,6 +227,8 @@ func (h *UsersHandler) Login(c *gin.Context) {
 		serialize.NewResponseWithErrCode(ecode.UserNotExistError, serialize.WithErr(errors.New("username not exist"))).ToJSON(c)
 		return
 	}
+	//2. 检查用户是否登录
+	//todo 此处需要检查用户是否已经登录，如果已经登录，需要返回已经登录的信息
 	//2. 检测密码是否正确
 	user, err := h.iDao.GetByUsername(ctx, form.Username)
 	if err != nil {
@@ -238,7 +241,16 @@ func (h *UsersHandler) Login(c *gin.Context) {
 		return
 	}
 	//3. 生成token
-	//todo 生成token
+	token, err := jwt.GenerateToken(user.Username, "admin")
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(errors.Wrap(err, "generate token error"))).ToJSON(c)
+		return
+	}
+	//4. 返回token
+	serialize.NewResponse(200, serialize.WithData(gin.H{
+		"token": token,
+	})).ToJSON(c)
+	return
 }
 
 // UpdateByUsername 根据用户名更新用户信息
@@ -259,6 +271,14 @@ func (h *UsersHandler) UpdateByUsername(c *gin.Context) {
 	panic("implement me")
 }
 
+// CheckLogin 检查用户是否登录
+// @Summary 检查用户是否登录
+// @Description 检查用户是否登录
+// @Tags users
+// @Accept application/json
+// @Produce application/json
+// @Param token header string true "token"
+// @Success 200 {object} string "ok"
 func (h *UsersHandler) CheckLogin(c *gin.Context) {
 	//TODO implement me
 	panic("implement me")
