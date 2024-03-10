@@ -6,6 +6,7 @@ import (
 	"SnapLink/internal/ecode"
 	"SnapLink/internal/model"
 	"SnapLink/internal/types"
+	"SnapLink/internal/utils"
 	"SnapLink/pkg/serialize"
 	"context"
 	"github.com/gin-gonic/gin"
@@ -168,14 +169,13 @@ func (h *UsersHandler) Register(c *gin.Context) {
 	//4. 检测手机号是否合法
 	//5. 检测邮箱是否合法
 	//todo 注册信息检测:为这几个字段添加布隆过滤器检测
-
-	u := new(model.TUser)
-	u.Username = form.Username
-	//todo 密码加密
-	u.Password = form.Password
-	u.RealName = form.RealName
-	u.Phone = form.Phone
-	u.Mail = form.Mail
+	u := &model.TUser{
+		Username: form.Username,
+		Password: utils.Encrypt(form.Password),
+		RealName: form.RealName,
+		Phone:    form.Phone,
+		Mail:     form.Mail,
+	}
 
 	//6. 注册用户
 	err = h.iDao.Create(ctx, u)
