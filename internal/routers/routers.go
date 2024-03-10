@@ -2,6 +2,7 @@ package routers
 
 import (
 	"net/http"
+	"time"
 
 	"SnapLink/docs"
 	"SnapLink/internal/config"
@@ -45,9 +46,9 @@ func NewRouter() *gin.Engine {
 
 	// init jwt middleware
 	jwt.Init(
-	//jwt.WithExpire(time.Hour*24),
-	//jwt.WithSigningKey("123456"),
-	//jwt.WithSigningMethod(jwt.HS384),
+		jwt.WithExpire(time.Hour*24),
+		jwt.WithSigningKey("123456"),
+		jwt.WithSigningMethod(jwt.HS384),
 	)
 
 	// metrics middleware
