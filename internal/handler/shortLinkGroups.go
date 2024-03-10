@@ -119,38 +119,13 @@ func (h *shortLinkGroupsHandler) UpdateByGID(c *gin.Context) {
 		return
 	}
 
-	//shortLinkGroup := &model.ShortLinkGroup{
-	//	Gid: form.Gid,
-	//}
-	//userid, _ := c.Get("c_user_id")
-	//shortLinkGroup.CUserId = userid.(string)
-	//if form.Name != "" {
-	//	_, yes := sercurity.CleanXSS(form.Name)
-	//	if yes {
-	//		serialize.NewResponse(400, serialize.WithMsg("参数错误"), serialize.WithErr(errors.New("name 不合法"))).ToJSON(c)
-	//		return
-	//	}
-	//	shortLinkGroup.Name = form.Name
-	//
-	//}
-	//if form.Description != "" {
-	//	_, yes := sercurity.CleanXSS(form.Description)
-	//	if yes {
-	//		serialize.NewResponse(400, serialize.WithMsg("参数错误"), serialize.WithErr(errors.New("description 不合法"))).ToJSON(c)
-	//		return
-	//	}
-	//	shortLinkGroup.Description = form.Description
-	//}
-	//
-	//ctx := middleware.WrapCtx(c)
-	//err := h.iDao.UpdateByGidAndCUserId(ctx, shortLinkGroup)
-	//if err != nil {
-	//	err = errors.Wrap(err, "写入数据库时失败")
-	//	logger.Error("UpdateByGID error", logger.Err(err), logger.Any("form", form), middleware.GCtxRequestIDField(c))
-	//	serialize.NewResponse(500, serialize.WithMsg("更新失败"), serialize.WithErr(err)).ToJSON(c)
-	//	return
-	//}
-	//logger.Info("更新成功", logger.Any("shortLinkGroup", shortLinkGroup), middleware.GCtxRequestIDField(c))
-	//serialize.NewResponse(200, serialize.WithMsg("更新成功")).ToJSON(c)
-	panic("implement me")
+	claims, _ := jwt.ParseToken(c.GetHeader("Authorization")[7:])
+	username := claims.UID
+	ctx := middleware.WrapCtx(c)
+	group, err := h.iDao.UpdateByGidAndUsername(ctx, form.Gid, form.Name, username)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	serialize.NewResponse(200, serialize.WithData(group)).ToJSON(c)
 }
