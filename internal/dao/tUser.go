@@ -66,10 +66,10 @@ func (d *tUserDao) deleteCache(ctx context.Context, id uint64) error {
 	return nil
 }
 
-// Create a record, insert the record and the id value is written back to the table
-func (d *tUserDao) Create(ctx context.Context, table *model.TUser) error {
-	err := d.db.WithContext(ctx).Create(table).Error
-	_ = d.deleteCache(ctx, table.ID)
+// Create 创建用户记录,并且删除缓存
+func (d *tUserDao) Create(ctx context.Context, u *model.TUser) error {
+	err := d.db.Table(u.TName()).WithContext(ctx).Create(u).Error
+	_ = d.deleteCache(ctx, u.ID)
 	return err
 }
 
@@ -455,7 +455,7 @@ func (d *tUserDao) UpdateByTx(ctx context.Context, tx *gorm.DB, table *model.TUs
 func (d *tUserDao) HasUsername(ctx context.Context, username string) (bool, error) {
 
 	//1. 在布隆过滤器中查询
-	result, err := cache.Exists(ctx, "username", username)
+	result, err := cache.BFExists(ctx, "username", username)
 	if err != nil {
 		return true, err
 	}
