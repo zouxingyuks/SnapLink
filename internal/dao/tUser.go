@@ -2,6 +2,7 @@ package dao
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -411,6 +412,13 @@ func (d *tUserDao) GetByUsername(ctx context.Context, username string) (*model.T
 	}
 	// 此处使用索引覆盖扫描
 	err := d.db.Table(user.TName()).WithContext(ctx).Where("username = ?", username).Select("id").Row().Scan(&user.ID)
+	if err != nil {
+		//如果是没有找到记录,此处需要对错误进行转换,以供上层判断
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, gorm.ErrRecordNotFound
+		}
+		return nil, err
+	}
 	err = d.db.Table(user.TName()).WithContext(ctx).Where("id = ?", user.ID).First(&user).Error
 
 	if err != nil {
