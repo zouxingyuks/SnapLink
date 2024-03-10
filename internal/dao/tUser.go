@@ -464,15 +464,7 @@ func (d *tUserDao) HasUsername(ctx context.Context, username string) (bool, erro
 		return false, nil
 	}
 	//2. 在数据库中查询
-	u, err := d.GetByCondition(ctx, &query.Conditions{
-		Columns: []query.Column{
-			{
-				Name:  "username",
-				Value: username,
-				Exp:   "=",
-			},
-		},
-	})
+	u, err := d.GetByUsername(ctx, username)
 	if err != nil {
 		return true, err
 	}
