@@ -137,42 +137,42 @@ func defaultBloomFilterCache() BloomFilterCache {
 	return defaultBloomFilterCacheInstance.cache
 }
 
-// Create 创建布隆过滤器
-func Create(ctx context.Context, key string, errorRate float64, capacity int) error {
+// BFCreate 创建布隆过滤器
+func BFCreate(ctx context.Context, key string, errorRate float64, capacity int) error {
 	return defaultBloomFilterCache().Create(ctx, key, errorRate, capacity)
 }
 
-// Add 添加值
-func Add(ctx context.Context, key string, value string) error {
+// BFAdd 添加值
+func BFAdd(ctx context.Context, key string, value string) error {
 	return defaultBloomFilterCache().Add(ctx, key, value)
 }
 
-// MAdd 批量添加多个值
-func MAdd(ctx context.Context, key string, values ...string) error {
+// BFMAdd 批量添加多个值
+func BFMAdd(ctx context.Context, key string, values ...string) error {
 	return defaultBloomFilterCache().MAdd(ctx, key, values...)
 }
 
-// Exists 检查值是否存在
-func Exists(ctx context.Context, key string, value string) (bool, error) {
+// BFExists 检查值是否存在
+func BFExists(ctx context.Context, key string, value string) (bool, error) {
 	return defaultBloomFilterCache().Exists(ctx, key, value)
 }
 
-// MExists 批量检查多个值是否存在
-func MExists(ctx context.Context, key string, values ...string) ([]bool, error) {
+// BFMExists 批量检查多个值是否存在
+func BFMExists(ctx context.Context, key string, values ...string) ([]bool, error) {
 	return defaultBloomFilterCache().MExists(ctx, key, values...)
 }
 
-// Rename 重命名
-func Rename(ctx context.Context, key string, newKey string) error {
+// BFRename 重命名
+func BFRename(ctx context.Context, key string, newKey string) error {
 	return defaultBloomFilterCache().Rename(ctx, key, newKey)
 }
 
-// Delete 删除布隆过滤器
-func Delete(ctx context.Context, key string) error {
+// BFDelete 删除布隆过滤器
+func BFDelete(ctx context.Context, key string) error {
 	return defaultBloomFilterCache().Delete(ctx, key)
 }
 
-// Info 获取布隆过滤器的信息
-func Info(ctx context.Context, key string) (items, capacity int64, err error) {
+// BFInfo 获取布隆过滤器的信息
+func BFInfo(ctx context.Context, key string) (items, capacity int64, err error) {
 	return defaultBloomFilterCache().Info(ctx, key)
 }
