@@ -451,17 +451,17 @@ func (d *tUserDao) UpdateByTx(ctx context.Context, tx *gorm.DB, table *model.TUs
 	return err
 }
 
-// HasUsername 查询用户名是否可用
+// HasUsername 查询用户名是否存在
 func (d *tUserDao) HasUsername(ctx context.Context, username string) (bool, error) {
 
 	//1. 在布隆过滤器中查询
 	result, err := cache.Exists(ctx, "username", username)
 	if err != nil {
-		return false, err
+		return true, err
 	}
 	// 布隆过滤器认为不存在，就是真不存在
 	if !result {
-		return true, nil
+		return false, nil
 	}
 	//2. 在数据库中查询
 	u, err := d.GetByCondition(ctx, &query.Conditions{
@@ -474,12 +474,12 @@ func (d *tUserDao) HasUsername(ctx context.Context, username string) (bool, erro
 		},
 	})
 	if err != nil {
-		return false, err
+		return true, err
 	}
 	if u == nil {
-		return true, nil
+		return false, nil
 	}
-	return false, nil
+	return true, nil
 }
 
 // GetAllUserName 获取所有的用户名
