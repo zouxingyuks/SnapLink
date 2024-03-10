@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-var tUserShardingNum = 16
-
 var _ TUserDao = (*tUserDao)(nil)
 
 // TUserDao defining the dao interface
@@ -150,7 +148,7 @@ func (d *tUserDao) GetByCondition(ctx context.Context, c *query.Conditions) (*mo
 		return nil, err
 	}
 	table := &model.TUser{}
-	for i := 0; i < tUserShardingNum; i++ {
+	for i := 0; i < model.TUserShardingNum; i++ {
 		err = d.db.WithContext(ctx).Table(fmt.Sprintf("t_user_%d", i)).Where(queryStr, args...).First(table).Error
 		if err == nil {
 			return table, nil
@@ -299,7 +297,7 @@ func (d *tUserDao) HasUsername(ctx context.Context, username string) (bool, erro
 // GetAllUserName 获取所有的用户名
 func (d *tUserDao) GetAllUserName(ctx context.Context) ([]string, error) {
 	usernames := make([]string, 0)
-	for i := 0; i < tUserShardingNum; i++ {
+	for i := 0; i < model.TUserShardingNum; i++ {
 		tUsernames := make([]string, 0)
 		err := d.db.WithContext(ctx).Table(fmt.Sprintf("t_user_%d", i)).Model(&model.TUser{}).Pluck("username", &tUsernames).Error
 		if err != nil {

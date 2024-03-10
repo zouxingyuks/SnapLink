@@ -22,7 +22,7 @@ type TUser struct {
 func (u *TUser) TName() string {
 	//对 username 进行取模分表
 	id := hash(u.Username)
-	return fmt.Sprintf("t_user_%d", id%16)
+	return fmt.Sprintf("t_user_%d", id%TUserShardingNum)
 }
 
 // hash 计算字符串的哈希值
