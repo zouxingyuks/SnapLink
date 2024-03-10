@@ -1,21 +1,16 @@
 package dao
 
 import (
+	"SnapLink/internal/cache"
+	"SnapLink/internal/model"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
-
-	"SnapLink/internal/cache"
-	"SnapLink/internal/model"
-
-	cacheBase "github.com/zhufuyi/sponge/pkg/cache"
 	"github.com/zhufuyi/sponge/pkg/ggorm/query"
-	"github.com/zhufuyi/sponge/pkg/utils"
-
 	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
+	"time"
 )
 
 var tUserShardingNum = 16
@@ -25,19 +20,14 @@ var _ TUserDao = (*tUserDao)(nil)
 // TUserDao defining the dao interface
 type TUserDao interface {
 	Create(ctx context.Context, table *model.TUser) error
+	Update(ctx context.Context, table *model.TUser) error
 	DeleteByID(ctx context.Context, id uint64) error
 	DeleteByIDs(ctx context.Context, ids []uint64) error
-	UpdateByID(ctx context.Context, table *model.TUser) error
-	GetByID(ctx context.Context, id uint64) (*model.TUser, error)
 	GetByUsername(ctx context.Context, username string) (*model.TUser, error)
 	GetByCondition(ctx context.Context, condition *query.Conditions) (*model.TUser, error)
 	GetByConditionWithUsername(ctx context.Context, condition *query.Conditions, username string) (*model.TUser, error)
-	GetByIDs(ctx context.Context, ids []uint64) (map[uint64]*model.TUser, error)
-	GetByLastID(ctx context.Context, lastID uint64, limit int, sort string) ([]*model.TUser, error)
 	GetByColumns(ctx context.Context, params *query.Params) ([]*model.TUser, int64, error)
 	CreateByTx(ctx context.Context, tx *gorm.DB, table *model.TUser) (uint64, error)
-	DeleteByTx(ctx context.Context, tx *gorm.DB, id uint64) error
-	UpdateByTx(ctx context.Context, tx *gorm.DB, table *model.TUser) error
 	HasUsername(ctx context.Context, username string) (bool, error)
 	GetAllUserName(ctx context.Context) ([]string, error)
 }
@@ -102,26 +92,19 @@ func (d *tUserDao) DeleteByIDs(ctx context.Context, ids []uint64) error {
 	return nil
 }
 
-// UpdateByID update a record by id
-func (d *tUserDao) UpdateByID(ctx context.Context, table *model.TUser) error {
-	err := d.updateDataByID(ctx, d.db, table)
-
+// Update 根据用户名更新用户信息
+func (d *tUserDao) Update(ctx context.Context, table *model.TUser) error {
+	err := d.updateData(ctx, d.db, table)
 	// delete cache
 	_ = d.deleteCache(ctx, table.ID)
-
 	return err
 }
 
-func (d *tUserDao) updateDataByID(ctx context.Context, db *gorm.DB, table *model.TUser) error {
-	if table.ID < 1 {
-		return errors.New("id cannot be 0")
+func (d *tUserDao) updateData(ctx context.Context, db *gorm.DB, table *model.TUser) error {
+	if table.Username == "" {
+		return errors.New("username cannot be empty")
 	}
-
 	update := map[string]interface{}{}
-
-	if table.Username != "" {
-		update["username"] = table.Username
-	}
 	if table.Password != "" {
 		update["password"] = table.Password
 	}
@@ -134,74 +117,8 @@ func (d *tUserDao) updateDataByID(ctx context.Context, db *gorm.DB, table *model
 	if table.Mail != "" {
 		update["mail"] = table.Mail
 	}
-	if table.DeletionTime != 0 {
-		update["deletion_time"] = table.DeletionTime
-	}
-	if table.CreateTime.IsZero() == false {
-		update["create_time"] = table.CreateTime
-	}
-	if table.UpdateTime.IsZero() == false {
-		update["update_time"] = table.UpdateTime
-	}
-	if table.DelFlag != 0 {
-		update["del_flag"] = table.DelFlag
-	}
-
-	return db.WithContext(ctx).Model(table).Updates(update).Error
-}
-
-// GetByID get a record by id
-func (d *tUserDao) GetByID(ctx context.Context, id uint64) (*model.TUser, error) {
-	// no cache
-	if d.cache == nil {
-		record := &model.TUser{}
-		err := d.db.WithContext(ctx).Where("id = ?", id).First(record).Error
-		return record, err
-	}
-
-	// get from cache or database
-	record, err := d.cache.Get(ctx, id)
-	if err == nil {
-		return record, nil
-	}
-
-	if errors.Is(err, model.ErrCacheNotFound) {
-		// for the same id, prevent high concurrent simultaneous access to database
-		val, err, _ := d.sfg.Do(utils.Uint64ToStr(id), func() (interface{}, error) { //nolint
-			table := &model.TUser{}
-			err = d.db.WithContext(ctx).Where("id = ?", id).First(table).Error
-			if err != nil {
-				// if data is empty, set not found cache to prevent cache penetration, default expiration time 10 minutes
-				if errors.Is(err, model.ErrRecordNotFound) {
-					err = d.cache.SetCacheWithNotFound(ctx, id)
-					if err != nil {
-						return nil, err
-					}
-					return nil, model.ErrRecordNotFound
-				}
-				return nil, err
-			}
-			// set cache
-			err = d.cache.Set(ctx, id, table, cache.TUserExpireTime)
-			if err != nil {
-				return nil, fmt.Errorf("cache.Set error: %v, id=%d", err, id)
-			}
-			return table, nil
-		})
-		if err != nil {
-			return nil, err
-		}
-		table, ok := val.(*model.TUser)
-		if !ok {
-			return nil, model.ErrRecordNotFound
-		}
-		return table, nil
-	} else if errors.Is(err, cacheBase.ErrPlaceholder) {
-		return nil, model.ErrRecordNotFound
-	}
-
-	// fail fast, if cache error return, don't request to db
-	return nil, err
+	update["update_time"] = time.Now()
+	return db.Table(table.TName()).WithContext(ctx).Where("username = ?", table.Username).Updates(update).Error
 }
 
 // GetByCondition get a record by condition
@@ -259,87 +176,6 @@ func (d *tUserDao) GetByConditionWithUsername(ctx context.Context, c *query.Cond
 		return nil, err
 	}
 	return table, nil
-}
-
-// GetByIDs get records by batch id
-func (d *tUserDao) GetByIDs(ctx context.Context, ids []uint64) (map[uint64]*model.TUser, error) {
-	// no cache
-	if d.cache == nil {
-		var records []*model.TUser
-		err := d.db.WithContext(ctx).Where("id IN (?)", ids).Find(&records).Error
-		if err != nil {
-			return nil, err
-		}
-		itemMap := make(map[uint64]*model.TUser)
-		for _, record := range records {
-			itemMap[record.ID] = record
-		}
-		return itemMap, nil
-	}
-
-	// get form cache or database
-	itemMap, err := d.cache.MultiGet(ctx, ids)
-	if err != nil {
-		return nil, err
-	}
-
-	var missedIDs []uint64
-	for _, id := range ids {
-		_, ok := itemMap[id]
-		if !ok {
-			missedIDs = append(missedIDs, id)
-			continue
-		}
-	}
-
-	// get missed data
-	if len(missedIDs) > 0 {
-		// find the id of an active placeholder, i.e. an id that does not exist in database
-		var realMissedIDs []uint64
-		for _, id := range missedIDs {
-			_, err = d.cache.Get(ctx, id)
-			if errors.Is(err, cacheBase.ErrPlaceholder) {
-				continue
-			}
-			realMissedIDs = append(realMissedIDs, id)
-		}
-
-		if len(realMissedIDs) > 0 {
-			var missedData []*model.TUser
-			err = d.db.WithContext(ctx).Where("id IN (?)", realMissedIDs).Find(&missedData).Error
-			if err != nil {
-				return nil, err
-			}
-
-			if len(missedData) > 0 {
-				for _, data := range missedData {
-					itemMap[data.ID] = data
-				}
-				err = d.cache.MultiSet(ctx, missedData, cache.TUserExpireTime)
-				if err != nil {
-					return nil, err
-				}
-			} else {
-				for _, id := range realMissedIDs {
-					_ = d.cache.SetCacheWithNotFound(ctx, id)
-				}
-			}
-		}
-	}
-
-	return itemMap, nil
-}
-
-// GetByLastID get paging records by last id and limit
-func (d *tUserDao) GetByLastID(ctx context.Context, lastID uint64, limit int, sort string) ([]*model.TUser, error) {
-	page := query.NewPage(0, limit, sort)
-
-	records := []*model.TUser{}
-	err := d.db.WithContext(ctx).Order(page.Sort()).Limit(page.Size()).Where("id < ?", lastID).Find(&records).Error
-	if err != nil {
-		return nil, err
-	}
-	return records, nil
 }
 
 // GetByColumns get paging records by column information,
@@ -431,32 +267,6 @@ func (d *tUserDao) GetByUsername(ctx context.Context, username string) (*model.T
 func (d *tUserDao) CreateByTx(ctx context.Context, tx *gorm.DB, table *model.TUser) (uint64, error) {
 	err := tx.WithContext(ctx).Create(table).Error
 	return table.ID, err
-}
-
-// DeleteByTx delete a record by id in the database using the provided transaction
-func (d *tUserDao) DeleteByTx(ctx context.Context, tx *gorm.DB, id uint64) error {
-	update := map[string]interface{}{
-		"deleted_at": time.Now(),
-	}
-	err := tx.WithContext(ctx).Model(&model.TUser{}).Where("id = ?", id).Updates(update).Error
-	if err != nil {
-		return err
-	}
-
-	// delete cache
-	_ = d.deleteCache(ctx, id)
-
-	return nil
-}
-
-// UpdateByTx update a record by id in the database using the provided transaction
-func (d *tUserDao) UpdateByTx(ctx context.Context, tx *gorm.DB, table *model.TUser) error {
-	err := d.updateDataByID(ctx, tx, table)
-
-	// delete cache
-	_ = d.deleteCache(ctx, table.ID)
-
-	return err
 }
 
 // HasUsername 查询用户名是否存在
