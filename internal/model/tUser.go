@@ -12,10 +12,10 @@ type TUser struct {
 	RealName     string     `gorm:"column:real_name;type:varchar(256);commit:'真实姓名'" json:"realName"`
 	Phone        string     `gorm:"column:phone;type:varchar(128);commit:'手机号';uniqueIndex" json:"phone"`
 	Mail         string     `gorm:"column:mail;type:varchar(512);commit:'邮箱';uniqueIndex" json:"mail"`
-	DeletionTime int64      `gorm:"column:deletion_time;type:bigint(20);commit:'注销时间戳'" json:"deletionTime"` //
-	CreateTime   *time.Time `gorm:"column:create_time;type:datetime;commit:'创建时间'" json:"createTime"`        //
-	UpdateTime   *time.Time `gorm:"column:update_time;type:datetime;commit:'修改时间'" json:"updateTime"`        //
-	DelFlag      int        `gorm:"column:del_flag;type:tinyint(1);commit:'删除标识'" json:"delFlag"`            //  0：未删除 1：已删除
+	DeletionTime int64      `gorm:"column:deletion_time;type:bigint(20);commit:'注销时间戳'" json:"deletionTime"`
+	CreateTime   *time.Time `gorm:"column:create_time;type:datetime;commit:'创建时间';default:CURRENT_TIMESTAMP" json:"createTime"` //
+	UpdateTime   *time.Time `gorm:"column:update_time;type:datetime;commit:'修改时间';default:CURRENT_TIMESTAMP" json:"updateTime"` //
+	DelFlag      int        `gorm:"column:del_flag;type:tinyint(1);commit:'删除标识'" json:"delFlag"`                               //  0：未删除 1：已删除
 }
 
 // TName 基于 Username 进行分库分表
