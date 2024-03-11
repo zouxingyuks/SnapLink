@@ -20,7 +20,8 @@ type ShortLinkGroupDao interface {
 	Create(ctx context.Context, record *model.ShortLinkGroup) error
 	GetAllByCUser(ctx context.Context, cUser string) ([]*model.ShortLinkGroup, error)
 	GetAll(ctx context.Context) ([]*model.ShortLinkGroup, error)
-	UpdateByGid(ctx context.Context, gid string, name string) (*model.ShortLinkGroup, error)
+	UpdateByGidAndUsername(ctx context.Context, gid string, name, username string) (*model.ShortLinkGroup, error)
+	DelByGidAndUsername(ctx context.Context, gid, username string) error
 }
 
 type shortLinkGroupsDao struct {
@@ -41,7 +42,10 @@ func NewShortLinkGroupDao(db *gorm.DB, xCache cache.ShortLinkGroupCache) ShortLi
 // Create 创建短链接分组
 func (d *shortLinkGroupsDao) Create(ctx context.Context, group *model.ShortLinkGroup) error {
 	err := d.db.Table(group.TName()).WithContext(ctx).Create(group).Error
-	return err
+	if err != nil {
+		return err
+	}
+	return d.cache.HSet(ctx, group.CUsername, group)
 }
 
 // GetAllByCUser 根据创建人获取所有的分组
@@ -59,8 +63,7 @@ func (d *shortLinkGroupsDao) GetAllByCUser(ctx context.Context, cUser string) ([
 	if err != nil {
 		return nil, err
 	}
-	d.cache.HMSet(ctx, cUser, records)
-	return records, nil
+	return records, d.cache.HMSet(ctx, cUser, records)
 
 }
 
@@ -83,13 +86,14 @@ func (d *shortLinkGroupsDao) GetAll(ctx context.Context) (result []*model.ShortL
 }
 
 // UpdateByGid 根据gid更新分组名称
-func (d *shortLinkGroupsDao) UpdateByGid(ctx context.Context, gid string, name string) (*model.ShortLinkGroup, error) {
+func (d *shortLinkGroupsDao) UpdateByGidAndUsername(ctx context.Context, gid string, name, username string) (*model.ShortLinkGroup, error) {
 	//todo 用事务改写此处
 	update := map[string]interface{}{}
 	update["name"] = name
 	update["updated_at"] = time.Now()
 	group := &model.ShortLinkGroup{
-		Gid: gid,
+		Gid:       gid,
+		CUsername: username,
 	}
 	tDB := d.db.Table(group.TName()).WithContext(ctx).Where("gid = ?", gid).Updates(update)
 	err := tDB.Error
@@ -102,4 +106,17 @@ func (d *shortLinkGroupsDao) UpdateByGid(ctx context.Context, gid string, name s
 	d.db.Table(group.TName()).WithContext(ctx).Where("gid = ?", gid).First(group)
 	d.cache.HSet(ctx, group.CUsername, group)
 	return group, nil
+}
+
+// DelByGidAndUsername 根据gid删除分组
+func (d *shortLinkGroupsDao) DelByGidAndUsername(ctx context.Context, gid, username string) error {
+	group := &model.ShortLinkGroup{
+		Gid:       gid,
+		CUsername: username,
+	}
+	err := d.db.Table(group.TName()).WithContext(ctx).Where("gid = ?", gid).Delete(group).Error
+	if err != nil {
+		return err
+	}
+	return d.cache.HDel(ctx, username, gid)
 }
