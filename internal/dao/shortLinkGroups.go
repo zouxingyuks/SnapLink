@@ -71,7 +71,7 @@ func (d *shortLinkGroupsDao) GetAllByCUser(ctx context.Context, cUser string) ([
 	err := d.db.Table(tableName).
 		WithContext(ctx).
 		Where("c_username = ?", cUser).
-		Order("sort_order ASC").
+		Order("sort_order DESC").
 		Find(&records).Error
 	if err != nil {
 		return nil, err
