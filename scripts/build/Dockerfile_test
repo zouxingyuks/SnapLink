@@ -1,0 +1,16 @@
+# Need to package the ecode first `tar zcf SnapLink.tar.gz $(ls)` and move it to the same directory as Dokerfile
+# rpc server source ecode, used to test rpc methods
+FROM golang:1.21-alpine
+MAINTAINER zhufuyi "g.zhufuyi@gmail.com"
+
+# go test dependency packages
+RUN apk add bash alpine-sdk build-base gcc
+
+COPY . /go/src/SnapLink
+WORKDIR /go/src/SnapLink
+RUN tar zxf SnapLink.tar.gz
+RUN go env -w GOPROXY=https://goproxy.cn,direct
+RUN go mod download
+RUN rm -f SnapLink.tar.gz
+
+CMD ["sleep","86400"]
