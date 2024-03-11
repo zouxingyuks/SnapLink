@@ -46,7 +46,7 @@ func (d *shortLinkGroupsDao) Create(ctx context.Context, group *model.ShortLinkG
 	if err != nil {
 		return err
 	}
-	return d.cache.HSet(ctx, group.CUsername, group)
+	return d.cache.ADD(ctx, group.CUsername, group)
 }
 
 // GetAllByCUser 根据创建人获取所有的分组
@@ -55,7 +55,7 @@ func (d *shortLinkGroupsDao) Create(ctx context.Context, group *model.ShortLinkG
 // 2. 缓存中特别指明没有数据,特别指明没有数据的情况是为了防止缓存穿透,其会返回一个 nil, 用于区别根本没有查到数据的情况
 func (d *shortLinkGroupsDao) GetAllByCUser(ctx context.Context, cUser string) ([]*model.ShortLinkGroup, error) {
 	// 从缓存中获取
-	records, _ := d.cache.HGetALL(ctx, cUser)
+	records, _ := d.cache.GetALL(ctx, cUser)
 	// 如果缓存中特别指明没有数据，直接返回
 	if records == nil {
 		records = make([]*model.ShortLinkGroup, 0)
@@ -79,9 +79,9 @@ func (d *shortLinkGroupsDao) GetAllByCUser(ctx context.Context, cUser string) ([
 	if len(records) == 0 {
 		// 缓存中特别指明没有数据
 
-		return records, d.cache.HSetEmpty(ctx, cUser)
+		return records, d.cache.SetEmpty(ctx, cUser)
 	}
-	return records, d.cache.HMSet(ctx, cUser, records)
+	return records, d.cache.MADD(ctx, cUser, records)
 
 }
 
@@ -122,7 +122,7 @@ func (d *shortLinkGroupsDao) UpdateByGidAndUsername(ctx context.Context, gid str
 		return nil, err
 	}
 	d.db.Table(group.TName()).WithContext(ctx).Where("gid = ?", gid).First(group)
-	d.cache.HSet(ctx, group.CUsername, group)
+	d.cache.Del(ctx, username)
 	return group, nil
 }
 
@@ -141,8 +141,9 @@ func (d *shortLinkGroupsDao) UpdateSortOrderByGidAndUsername(ctx context.Context
 	}
 
 	// 构建完整的SQL语句
-	sql := fmt.Sprintf("UPDATE %s SET sort_order = CASE %s END WHERE gid IN (?) AND c_username = ?", model.ShortLinkGroup{}.TName(), cases.String())
+	tableName := model.ShortLinkGroup{CUsername: username}.TName()
 
+	sql := fmt.Sprintf("UPDATE %s SET sort_order = CASE %s END WHERE gid IN (?) AND c_username = ?", tableName, cases.String())
 	// 在GORM中使用事务处理
 	err := d.db.Transaction(func(tx *gorm.DB) error {
 		// 使用WithContext确保上下文传递
@@ -172,5 +173,5 @@ func (d *shortLinkGroupsDao) DelByGidAndUsername(ctx context.Context, gid, usern
 	if err != nil {
 		return err
 	}
-	return d.cache.HDel(ctx, username, gid)
+	return d.cache.Del(ctx, username)
 }
