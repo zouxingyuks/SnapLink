@@ -2,6 +2,7 @@ package routers
 
 import (
 	"SnapLink/internal/handler"
+	"github.com/zhufuyi/sponge/pkg/gin/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -13,16 +14,18 @@ func init() {
 }
 
 func shortLinkRouter(group *gin.RouterGroup, h handler.ShortLinkHandler) {
-	//group.Use(middleware.Auth()) // all of the following routes use jwt authentication
-	// or group.Use(middleware.Auth(middleware.WithVerify(verify))) // token authentication
-
-	group.POST("/shortLink", h.Create)
-	group.DELETE("/shortLink/:id", h.DeleteByID)
-	group.POST("/shortLink/delete/ids", h.DeleteByIDs)
-	group.PUT("/shortLink/:id", h.UpdateByID)
-	group.GET("/shortLink/:id", h.GetByID)
-	group.POST("/shortLink/condition", h.GetByCondition)
-	group.POST("/shortLink/list/ids", h.ListByIDs)
-	group.GET("/shortLink/list", h.ListByLastID)
-	group.POST("/shortLink/list", h.List)
+	group = group.Group("/")
+	group.Use(middleware.Auth())
+	//创建短链接
+	group.POST("/create", h.Create)
+	////批量创建短链接
+	//group.POST("/create/batch", h.CreateBatch)
+	//group.DELETE("/shortLink/:id", h.DeleteByID)
+	//group.POST("/shortLink/delete/ids", h.DeleteByIDs)
+	//group.PUT("/shortLink/:id", h.UpdateByID)
+	//group.GET("/shortLink/:id", h.GetByID)
+	//group.POST("/shortLink/condition", h.GetByCondition)
+	//group.POST("/shortLink/list/ids", h.ListByIDs)
+	//group.GET("/shortLink/list", h.ListByLastID)
+	//group.POST("/shortLink/list", h.List)
 }

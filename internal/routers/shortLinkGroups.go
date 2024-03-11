@@ -12,12 +12,13 @@ func init() {
 	})
 }
 func ShortLinkGroupRouter(group *gin.RouterGroup, h handler.ShortLinkGroupHandler) {
+	group = group.Group("/group")
 	group.Use(middleware.Auth())
 
 	// 创建短链接分组
-	group.POST("/group", h.Create)
-	group.GET("/group", h.List)
-	group.PUT("/group", h.UpdateByGID)
-	group.DELETE("/group", h.DelByGID)
-	group.POST("group/sort", h.UpdateSortOrder)
+	group.POST("/", h.Create)
+	group.GET("/", h.List)
+	group.PUT("/", h.UpdateByGID)
+	group.DELETE("/", h.DelByGID)
+	group.POST("/sort", h.UpdateSortOrder)
 }
