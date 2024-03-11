@@ -9,6 +9,7 @@ import (
 	"SnapLink/pkg/serialize"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/pkg/errors"
 	"github.com/zhufuyi/sponge/pkg/gin/middleware"
 	"github.com/zhufuyi/sponge/pkg/jwt"
 )
@@ -19,6 +20,8 @@ var _ ShortLinkGroupHandler = (*shortLinkGroupsHandler)(nil)
 type ShortLinkGroupHandler interface {
 	Create(c *gin.Context)
 	List(c *gin.Context)
+	UpdateByGID(c *gin.Context)
+	DelByGID(c *gin.Context)
 }
 
 type shortLinkGroupsHandler struct {
@@ -128,4 +131,29 @@ func (h *shortLinkGroupsHandler) UpdateByGID(c *gin.Context) {
 		return
 	}
 	serialize.NewResponse(200, serialize.WithData(group)).ToJSON(c)
+}
+
+// DelByGID 根据 gid 删除对应的短链接分组
+// @Summary 根据 gid 删除对应的短链接分组
+// @Description 根据 gid 删除对应的短链接分组
+// @Tags shortLinkGroup
+// @Accept application/json
+// @Produce application/json
+// @Param Authorization header string true "token"
+// @Param gid body string true "gid"
+func (h *shortLinkGroupsHandler) DelByGID(c *gin.Context) {
+	gid := c.Query("gid")
+	if gid == "" {
+		serialize.NewResponseWithErrCode(ecode.RequestParamError, serialize.WithErr(errors.New("gid is empty"))).ToJSON(c)
+		return
+	}
+	claims, _ := jwt.ParseToken(c.GetHeader("Authorization")[7:])
+	username := claims.UID
+	ctx := middleware.WrapCtx(c)
+	err := h.iDao.DelByGidAndUsername(ctx, gid, username)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	serialize.NewResponse(200).ToJSON(c)
 }
