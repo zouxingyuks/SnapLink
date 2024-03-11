@@ -29,6 +29,7 @@ type ShortLinkGroupCache interface {
 	HSetEmpty(ctx context.Context, username string) error
 	HGetALL(ctx context.Context, username string) ([]*model.ShortLinkGroup, error)
 	HDel(ctx context.Context, username string, gids ...string) error
+	UpdateOrders(ctx context.Context, username string, gids []string, orders []int) error
 }
 
 // shortLinkGroupsCache define a cache struct
@@ -119,4 +120,15 @@ func (c *shortLinkGroupsCache) HDel(ctx context.Context, username string, gids .
 func (c *shortLinkGroupsCache) Del(ctx context.Context, username string) error {
 	key := c.makeSLGroupKey(username)
 	return c.client.Del(ctx, key).Err()
+}
+
+// UpdateOrders 更新用户的 hash 缓存中的排序
+func (c *shortLinkGroupsCache) UpdateOrders(ctx context.Context, username string, gids []string, orders []int) error {
+	pipeline := c.client.Pipeline()
+	key := c.makeSLGroupKey(username)
+	for i, gid := range gids {
+		pipeline.HSet(ctx, key, gid, orders[i])
+	}
+	_, err := pipeline.Exec(ctx)
+	return err
 }
