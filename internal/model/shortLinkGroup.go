@@ -3,18 +3,22 @@ package model
 import (
 	"fmt"
 	"gorm.io/gorm"
+	"time"
 )
 
 type ShortLinkGroup struct {
-	gorm.Model
-	SortOrder   int    `gorm:"column:sort_order;type:int;NOT NULL;default:0" json:"sort_order"`
-	Description string `gorm:"column:description;type:text" json:"description"`
-	Enable      bool   `gorm:"column:enable;type:tinyint(1);default:1" json:"enable"`
-	Gid         int    `gorm:"column:gid;NOT NULL;uniqueIndex:idx_name_c_userid" json:"gid"`
-	Name        string `gorm:"column:name;type:varchar(50);NOT NULL" json:"name"`
-	CUserId     string `gorm:"column:c_user_id;type:varchar(50);NOT NULL;uniqueIndex:idx_name_c_userid" json:"cUser"`
+	ID        uint           `gorm:"primarykey" json:"-"`
+	CreatedAt time.Time      ` json:"-"`
+	UpdatedAt time.Time      ` json:"-"`
+	DeletedAt gorm.DeletedAt `gorm:"index:idx" json:"-"`
+	SortOrder int            `gorm:"column:sort_order;type:int;NOT NULL;default:0;index:idx;commit:'排序标识'" json:"sort_order"`
+	Gid       string         `gorm:"column:gid;NOT NULL;commit:'分组 id';index:idx" json:"gid"`
+	Name      string         `gorm:"column:name;type:varchar(50);NOT NULL;commit:'分组名'" json:"name"`
+	CUsername string         `gorm:"column:c_username;type:varchar(50);NOT NULL;commit:'创建人';index:idx" json:"cUser"`
 }
 
-func (s ShortLinkGroup) TableName() string {
-	return fmt.Sprintf("short_link_group_%d", s.ID%16)
+// TName 根据创建人进行分表
+func (s ShortLinkGroup) TName() string {
+	id := hash(s.CUsername)
+	return fmt.Sprintf("short_link_group_%d", id%SLGroupShardingNum)
 }
