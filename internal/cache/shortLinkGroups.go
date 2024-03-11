@@ -29,6 +29,7 @@ type ShortLinkGroupCache interface {
 	HSetEmpty(ctx context.Context, username string) error
 	HGetALL(ctx context.Context, username string) ([]*model.ShortLinkGroup, error)
 	HDel(ctx context.Context, username string, gids ...string) error
+	Del(ctx context.Context, username string) error
 }
 
 // shortLinkGroupsCache define a cache struct
