@@ -22,6 +22,7 @@ type ShortLinkGroupHandler interface {
 	List(c *gin.Context)
 	UpdateByGID(c *gin.Context)
 	DelByGID(c *gin.Context)
+	UpdateSortOrder(c *gin.Context)
 }
 
 type shortLinkGroupsHandler struct {
@@ -156,4 +157,37 @@ func (h *shortLinkGroupsHandler) DelByGID(c *gin.Context) {
 		return
 	}
 	serialize.NewResponse(200).ToJSON(c)
+}
+
+// UpdateSortOrder 更新排序
+// @Summary 更新排序
+// @Description 更新排序
+// @Tags shortLinkGroup
+// @Accept application/json
+// @Produce application/json
+// @Param Authorization header string true "token"
+// @Param sort_order body int true "排序标识"
+// @Success 200 {object} types.UpdateSortOrderRespond{}
+func (h *shortLinkGroupsHandler) UpdateSortOrder(c *gin.Context) {
+	form := make([]types.UpdateShortLinkGroupSortOrderRequest, 0)
+	if err := c.ShouldBind(&form); err != nil {
+		serialize.NewResponseWithErrCode(ecode.RequestParamError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	claims, _ := jwt.ParseToken(c.GetHeader("Authorization")[7:])
+	username := claims.UID
+	n := len(form)
+	gids, sortOrders := make([]string, n), make([]int, n)
+	for i, v := range form {
+		gids[i] = v.Gid
+		sortOrders[i] = v.SortOrder
+	}
+	ctx := middleware.WrapCtx(c)
+	err := h.iDao.UpdateSortOrderByGidAndUsername(ctx, gids, sortOrders, username)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	serialize.NewResponse(200).ToJSON(c)
+
 }
