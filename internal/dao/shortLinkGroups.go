@@ -49,9 +49,17 @@ func (d *shortLinkGroupsDao) Create(ctx context.Context, group *model.ShortLinkG
 }
 
 // GetAllByCUser 根据创建人获取所有的分组
+// 此处缓存的判定有两点:
+// 1. 缓存中没有数据, 从数据库中获取数据, 并且将数据写入缓存.此情况返回的 records 虽然是空的,但是不会返回 nil
+// 2. 缓存中特别指明没有数据,特别指明没有数据的情况是为了防止缓存穿透,其会返回一个 nil, 用于区别根本没有查到数据的情况
 func (d *shortLinkGroupsDao) GetAllByCUser(ctx context.Context, cUser string) ([]*model.ShortLinkGroup, error) {
 	// 从缓存中获取
 	records, _ := d.cache.HGetALL(ctx, cUser)
+	// 如果缓存中特别指明没有数据，直接返回
+	if records == nil {
+		records = make([]*model.ShortLinkGroup, 0)
+		return records, nil
+	}
 	if len(records) > 0 {
 		return records, nil
 	}
@@ -62,6 +70,11 @@ func (d *shortLinkGroupsDao) GetAllByCUser(ctx context.Context, cUser string) ([
 	err := d.db.Table(tableName).WithContext(ctx).Where("c_username = ?", cUser).Find(&records).Error
 	if err != nil {
 		return nil, err
+	}
+	if len(records) == 0 {
+		// 缓存中特别指明没有数据
+
+		return records, d.cache.HSetEmpty(ctx, cUser)
 	}
 	return records, d.cache.HMSet(ctx, cUser, records)
 
@@ -85,7 +98,7 @@ func (d *shortLinkGroupsDao) GetAll(ctx context.Context) (result []*model.ShortL
 	return result, nil
 }
 
-// UpdateByGid 根据gid更新分组名称
+// UpdateByGidAndUsername 根据gid更新分组名称
 func (d *shortLinkGroupsDao) UpdateByGidAndUsername(ctx context.Context, gid string, name, username string) (*model.ShortLinkGroup, error) {
 	//todo 用事务改写此处
 	update := map[string]interface{}{}
