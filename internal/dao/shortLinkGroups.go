@@ -159,7 +159,7 @@ func (d *shortLinkGroupsDao) UpdateSortOrderByGidAndUsername(ctx context.Context
 		return fmt.Errorf("failed to update sort order by gid and username: %w", err)
 	}
 	// 更新缓存
-	return d.cache.UpdateOrders(ctx, username, gids, sortOrders)
+	return d.cache.Del(ctx, username)
 }
 
 // DelByGidAndUsername 根据gid删除分组
