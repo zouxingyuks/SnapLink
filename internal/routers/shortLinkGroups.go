@@ -19,9 +19,5 @@ func ShortLinkGroupRouter(group *gin.RouterGroup, h handler.ShortLinkGroupHandle
 	group.GET("/group", h.List)
 	group.PUT("/group", h.UpdateByGID)
 	group.DELETE("/group", h.DelByGID)
-	//
-	////complete
-	//group.PUT("/slink/group", h.UpdateByGID)
-	//group.DELETE("/slink/group", h.DeleteByGID)
-
+	group.POST("group/sort", h.UpdateSortOrder)
 }
