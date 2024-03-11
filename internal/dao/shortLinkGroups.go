@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"SnapLink/internal/cache"
@@ -21,9 +22,9 @@ type ShortLinkGroupDao interface {
 	GetAllByCUser(ctx context.Context, cUser string) ([]*model.ShortLinkGroup, error)
 	GetAll(ctx context.Context) ([]*model.ShortLinkGroup, error)
 	UpdateByGidAndUsername(ctx context.Context, gid string, name, username string) (*model.ShortLinkGroup, error)
+	UpdateSortOrderByGidAndUsername(ctx context.Context, gids []string, sortOrders []int, username string) error
 	DelByGidAndUsername(ctx context.Context, gid, username string) error
 }
-
 type shortLinkGroupsDao struct {
 	db    *gorm.DB
 	cache cache.ShortLinkGroupCache
@@ -67,7 +68,11 @@ func (d *shortLinkGroupsDao) GetAllByCUser(ctx context.Context, cUser string) ([
 	tableName := model.ShortLinkGroup{
 		CUsername: cUser,
 	}.TName()
-	err := d.db.Table(tableName).WithContext(ctx).Where("c_username = ?", cUser).Find(&records).Error
+	err := d.db.Table(tableName).
+		WithContext(ctx).
+		Where("c_username = ?", cUser).
+		Order("sort_order ASC").
+		Find(&records).Error
 	if err != nil {
 		return nil, err
 	}
@@ -119,6 +124,42 @@ func (d *shortLinkGroupsDao) UpdateByGidAndUsername(ctx context.Context, gid str
 	d.db.Table(group.TName()).WithContext(ctx).Where("gid = ?", gid).First(group)
 	d.cache.HSet(ctx, group.CUsername, group)
 	return group, nil
+}
+
+// UpdateSortOrderByGidAndUsername 批量更新排序
+// todo 索引二次优化
+func (d *shortLinkGroupsDao) UpdateSortOrderByGidAndUsername(ctx context.Context, gids []string, sortOrders []int, username string) error {
+	lg := len(gids)
+	ls := len(sortOrders)
+	if lg != ls || lg == 0 {
+		return errors.New("gids and sortOrders length not equal or are zero")
+	}
+	// 开始构建CASE WHEN语句
+	var cases strings.Builder
+	for i, gid := range gids {
+		cases.WriteString(fmt.Sprintf("WHEN gid = '%s' THEN %d ", gid, sortOrders[i]))
+	}
+
+	// 构建完整的SQL语句
+	sql := fmt.Sprintf("UPDATE %s SET sort_order = CASE %s END WHERE gid IN (?) AND c_username = ?", model.ShortLinkGroup{}.TName(), cases.String())
+
+	// 在GORM中使用事务处理
+	err := d.db.Transaction(func(tx *gorm.DB) error {
+		// 使用WithContext确保上下文传递
+		if err := tx.WithContext(ctx).Exec(sql, gids, username).Error; err != nil {
+			// 如果执行失败，返回错误将自动回滚
+			return err
+		}
+		// 如果执行成功，返回nil提交事务
+		return nil
+	})
+
+	// 处理事务结果
+	if err != nil {
+		return fmt.Errorf("failed to update sort order by gid and username: %w", err)
+	}
+	// 更新缓存
+	return d.cache.UpdateOrders(ctx, username, gids, sortOrders)
 }
 
 // DelByGidAndUsername 根据gid删除分组
