@@ -2,20 +2,16 @@ package model
 
 import (
 	"fmt"
-	"time"
+	"gorm.io/gorm"
 )
 
 type TUser struct {
-	ID           uint64     `gorm:"column:id;type:bigint(20);primary_key;AUTO_INCREMENT" json:"id"`
-	Username     string     `gorm:"column:username;type:varchar(256);commit:'用户名';uniqueIndex" json:"username"`
-	Password     string     `gorm:"column:password;type:varchar(512);commit:'密码'" json:"password"`
-	RealName     string     `gorm:"column:real_name;type:varchar(256);commit:'真实姓名'" json:"realName"`
-	Phone        string     `gorm:"column:phone;type:varchar(128);commit:'手机号';uniqueIndex" json:"phone"`
-	Mail         string     `gorm:"column:mail;type:varchar(512);commit:'邮箱';uniqueIndex" json:"mail"`
-	DeletionTime int64      `gorm:"column:deletion_time;type:bigint(20);commit:'注销时间戳'" json:"deletionTime"`
-	CreateTime   *time.Time `gorm:"column:create_time;type:datetime;commit:'创建时间';default:CURRENT_TIMESTAMP" json:"createTime"` //
-	UpdateTime   *time.Time `gorm:"column:update_time;type:datetime;commit:'修改时间';default:CURRENT_TIMESTAMP" json:"updateTime"` //
-	DelFlag      int        `gorm:"column:del_flag;type:tinyint(1);commit:'删除标识'" json:"delFlag"`                               //  0：未删除 1：已删除
+	gorm.Model `json:"-"`
+	Username   string `gorm:"column:username;type:nvarchar(20);commit:'用户名';uniqueIndex" json:"username"`
+	Password   string `gorm:"column:password;type:varchar(50);commit:'密码'" json:"password"`
+	RealName   string `gorm:"column:real_name;type:nvarchar(20);commit:'真实姓名'" json:"realName"`
+	Phone      string `gorm:"column:phone;type:varchar(20);commit:'手机号';uniqueIndex" json:"phone"`
+	Mail       string `gorm:"column:mail;type:varchar(20);commit:'邮箱';uniqueIndex" json:"mail"`
 }
 
 // TName 基于 Username 进行分库分表
