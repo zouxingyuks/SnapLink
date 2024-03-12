@@ -8,10 +8,10 @@ import (
 type TUser struct {
 	gorm.Model `json:"-"`
 	Username   string `gorm:"column:username;type:nvarchar(20);commit:'用户名';uniqueIndex" json:"username"`
-	Password   string `gorm:"column:password;type:varchar(50);commit:'密码'" json:"password"`
+	Password   string `gorm:"column:password;type:varchar(80);commit:'密码'" json:"password"`
 	RealName   string `gorm:"column:real_name;type:nvarchar(20);commit:'真实姓名'" json:"realName"`
 	Phone      string `gorm:"column:phone;type:varchar(20);commit:'手机号';uniqueIndex" json:"phone"`
-	Mail       string `gorm:"column:mail;type:varchar(20);commit:'邮箱';uniqueIndex" json:"mail"`
+	Mail       string `gorm:"column:mail;type:varchar(50);commit:'邮箱';uniqueIndex" json:"mail"`
 }
 
 // TName 基于 Username 进行分库分表
