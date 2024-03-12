@@ -14,7 +14,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/zhufuyi/sponge/pkg/gin/middleware"
 	"github.com/zhufuyi/sponge/pkg/jwt"
+	"regexp"
 )
+
+var phoneRegexp = `^\+[1-9]\d{1,14}$`
 
 type UsersHandler struct {
 	iDao dao.TUserDao
@@ -152,6 +155,11 @@ func (h *UsersHandler) Register(c *gin.Context) {
 	form := new(types.RegisterRequest)
 	if err := c.ShouldBindJSON(form); err != nil {
 		serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	//手工校验手机号格式合法性
+	if ok, err := regexp.Match(phoneRegexp, []byte(form.Phone)); !ok || err != nil {
+		serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithErr(errors.New("phone format error"))).ToJSON(c)
 		return
 	}
 	//1. 检测用户名是否存在
