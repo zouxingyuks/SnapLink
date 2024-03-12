@@ -12,8 +12,8 @@ type GetByUsernameDesensitizationRespond struct {
 type RegisterRequest struct {
 	Username string `json:"username"  binding:"required,min=3,max=11"`
 	Password string `json:"password"  binding:"required,min=6,max=15"`
-	RealName string `json:"realName"  binding:"required"`
-	Phone    string `json:"phone"  binding:"required,e164"`
+	RealName string `json:"realName"  binding:"required,min=2,max=20"`
+	Phone    string `json:"phone"  binding:"required"`
 	Mail     string `json:"mail"  binding:"required,email"`
 }
 
