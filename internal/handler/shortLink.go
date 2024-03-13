@@ -9,9 +9,11 @@ import (
 	"SnapLink/internal/utils/GenerateShortLink"
 	"SnapLink/pkg/serialize"
 	"context"
+	"fmt"
 	"github.com/pkg/errors"
 	"gorm.io/gorm"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -21,9 +23,14 @@ import (
 
 var _ ShortLinkHandler = (*shortLinkHandler)(nil)
 
+// todo  将短链接的域名改为配置文件中的域名
+var Domain = "localhost"
+
 // ShortLinkHandler defining the handler interface
 type ShortLinkHandler interface {
 	Create(c *gin.Context)
+	List(c *gin.Context)
+	Delete(c *gin.Context)
 	//CreateBatch(c *gin.Context)
 	//DeleteByID(c *gin.Context)
 	//DeleteByIDs(c *gin.Context)
@@ -32,7 +39,6 @@ type ShortLinkHandler interface {
 	//GetByCondition(c *gin.Context)
 	//ListByIDs(c *gin.Context)
 	//ListByLastID(c *gin.Context)
-	//List(c *gin.Context)
 }
 
 type shortLinkHandler struct {
@@ -57,6 +63,8 @@ func (h *shortLinkHandler) makeShortLinkBF() {
 	// 如果创建成功，说明不存在，需要添加数据
 	if err == nil {
 		//todo implement me
+		// 此任务可以解耦,因为即使误判，也会被数据库的唯一索引拦截，因此可以异步执行
+		// 此处的布隆过滤器更多的是为了提升性能
 		panic("implement me")
 
 	}
@@ -76,7 +84,8 @@ func (h *shortLinkHandler) makeShortLinkBF() {
 // @Param validDateType body int false "有效类型"
 // @Param describe body string false "描述"
 // @Success 200 {object} types.CreateShortLinkRespond{}
-// @RedirectInfo /api/v1/shortLink [post]
+// @Redirect /api/v1/shortLink [post]
+// 创建逻辑：https://drive.google.com/file/d/1GvDCdeJaA90WbBmUbVBH-1jsgT0XCiUZ/view?usp=sharing
 func (h *shortLinkHandler) Create(c *gin.Context) {
 	form := new(types.CreateShortLinkRequest)
 
@@ -93,7 +102,6 @@ func (h *shortLinkHandler) Create(c *gin.Context) {
 	}
 	//2. 生成短链接
 	sLink := model.ShortLink{
-		Clicks:        0,
 		Enable:        1,
 		Domain:        u.Host,
 		OriginUrl:     u.String(),
@@ -129,369 +137,94 @@ func (h *shortLinkHandler) Create(c *gin.Context) {
 		return
 	}
 
-	fullShortURL := makeFullShortURL(sLink.Domain, sLink.Uri)
+	fullShortURL := makeFullShortURL(Domain, sLink.Uri)
 	logger.Info("创建短链接成功", logger.Any("sLink", sLink), logger.String("fullShortURL", fullShortURL), middleware.GCtxRequestIDField(c))
 	serialize.NewResponse(200, serialize.WithData(fullShortURL)).ToJSON(c)
 }
 
-//	func (h *shortLinkHandler) CreateBatch(c *gin.Context) {
-//		//todo implement me
-//		panic("implement me")
-//	}
-//
-// // DeleteByID delete a record by id
-// // @Summary delete shortLink
-// // @Description delete shortLink by id
-// // @Tags shortLink
-// // @accept json
-// // @Produce json
-// // @Param id path string true "id"
-// // @Success 200 {object} types.DeleteShortLinkByIDRespond{}
-// // @RedirectInfo /api/v1/shortLink/{id} [delete]
-//
-//	func (h *shortLinkHandler) DeleteByID(c *gin.Context) {
-//		_, id, isAbort := getShortLinkIDFromPath(c)
-//		if isAbort {
-//			response.Error(c, ecode.InvalidParams)
-//			return
-//		}
-//
-//		ctx := middleware.WrapCtx(c)
-//		err := h.iDao.DeleteByID(ctx, id)
-//		if err != nil {
-//			logger.Error("DeleteByGidAndCUserId error", logger.Err(err), logger.Any("id", id), middleware.GCtxRequestIDField(c))
-//			response.Output(c, ecode.InternalServerError.ToHTTPCode())
-//			return
-//		}
-//
-//		response.Success(c)
-//	}
-//
-// // DeleteByIDs delete records by batch id
-// // @Summary delete shortLinks
-// // @Description delete shortLinks by batch id
-// // @Tags shortLink
-// // @Param data body types.DeleteShortLinksByIDsRequest true "id array"
-// // @Accept json
-// // @Produce json
-// // @Success 200 {object} types.DeleteShortLinksByIDsRespond{}
-// // @RedirectInfo /api/v1/shortLink/delete/ids [post]
-//
-//	func (h *shortLinkHandler) DeleteByIDs(c *gin.Context) {
-//		form := &types.DeleteShortLinksByIDsRequest{}
-//		err := c.ShouldBindJSON(form)
-//		if err != nil {
-//			logger.Warn("ShouldBindJSON error: ", logger.Err(err), middleware.GCtxRequestIDField(c))
-//			response.Error(c, ecode.InvalidParams)
-//			return
-//		}
-//
-//		ctx := middleware.WrapCtx(c)
-//		err = h.iDao.DeleteByIDs(ctx, form.IDs)
-//		if err != nil {
-//			logger.Error("GetByIDs error", logger.Err(err), logger.Any("form", form), middleware.GCtxRequestIDField(c))
-//			response.Output(c, ecode.InternalServerError.ToHTTPCode())
-//			return
-//		}
-//
-//		response.Success(c)
-//	}
-//
-// // UpdateByID update information by id
-// // @Summary update shortLink
-// // @Description update shortLink information by id
-// // @Tags shortLink
-// // @accept json
-// // @Produce json
-// // @Param id path string true "id"
-// // @Param data body types.UpdateShortLinkByIDRequest true "shortLink information"
-// // @Success 200 {object} types.UpdateShortLinkByIDRespond{}
-// // @RedirectInfo /api/v1/shortLink/{id} [put]
-//
-//	func (h *shortLinkHandler) UpdateByID(c *gin.Context) {
-//		_, id, isAbort := getShortLinkIDFromPath(c)
-//		if isAbort {
-//			response.Error(c, ecode.InvalidParams)
-//			return
-//		}
-//
-//		form := &types.UpdateShortLinkByIDRequest{}
-//		err := c.ShouldBindJSON(form)
-//		if err != nil {
-//			logger.Warn("ShouldBindJSON error: ", logger.Err(err), middleware.GCtxRequestIDField(c))
-//			response.Error(c, ecode.InvalidParams)
-//			return
-//		}
-//		form.ID = id
-//
-//		shortLink := &model.ShortLink{}
-//		err = copier.Copy(shortLink, form)
-//		if err != nil {
-//			response.Error(c, ecode.ErrUpdateByIDShortLink)
-//			return
-//		}
-//
-//		ctx := middleware.WrapCtx(c)
-//		err = h.iDao.UpdateByID(ctx, shortLink)
-//		if err != nil {
-//			logger.Error("UpdateByGID error", logger.Err(err), logger.Any("form", form), middleware.GCtxRequestIDField(c))
-//			response.Output(c, ecode.InternalServerError.ToHTTPCode())
-//			return
-//		}
-//
-//		response.Success(c)
-//	}
-//
-// // GetByID get a record by id
-// // @Summary get shortLink detail
-// // @Description get shortLink detail by id
-// // @Tags shortLink
-// // @Param id path string true "id"
-// // @Accept json
-// // @Produce json
-// // @Success 200 {object} types.GetShortLinkByIDRespond{}
-// // @RedirectInfo /api/v1/shortLink/{id} [get]
-//
-//	func (h *shortLinkHandler) GetByID(c *gin.Context) {
-//		idStr, id, isAbort := getShortLinkIDFromPath(c)
-//		if isAbort {
-//			response.Error(c, ecode.InvalidParams)
-//			return
-//		}
-//
-//		ctx := middleware.WrapCtx(c)
-//		shortLink, err := h.iDao.GetByID(ctx, id)
-//		if err != nil {
-//			if errors.Is(err, query.ErrNotFound) {
-//				logger.Warn("GetByURI not found", logger.Err(err), logger.Any("id", id), middleware.GCtxRequestIDField(c))
-//				response.Error(c, ecode.NotFound)
-//			} else {
-//				logger.Error("GetByURI error", logger.Err(err), logger.Any("id", id), middleware.GCtxRequestIDField(c))
-//				response.Output(c, ecode.InternalServerError.ToHTTPCode())
-//			}
-//			return
-//		}
-//
-//		data := &types.ShortLinkObjDetail{}
-//		err = copier.Copy(data, shortLink)
-//		if err != nil {
-//			response.Error(c, ecode.ErrGetByIDShortLink)
-//			return
-//		}
-//		data.ID = idStr
-//
-//		response.Success(c, gin.H{"shortLink": data})
-//	}
-//
-// // GetByCondition get a record by condition
-// // @Summary get shortLink by condition
-// // @Description get shortLink by condition
-// // @Tags shortLink
-// // @Param data body types.Conditions true "query condition"
-// // @Accept json
-// // @Produce json
-// // @Success 200 {object} types.GetShortLinkByConditionRespond{}
-// // @RedirectInfo /api/v1/shortLink/condition [post]
-//
-//	func (h *shortLinkHandler) GetByCondition(c *gin.Context) {
-//		form := &types.GetShortLinkByConditionRequest{}
-//		err := c.ShouldBindJSON(form)
-//		if err != nil {
-//			logger.Warn("ShouldBindJSON error: ", logger.Err(err), middleware.GCtxRequestIDField(c))
-//			response.Error(c, ecode.InvalidParams)
-//			return
-//		}
-//		err = form.Conditions.CheckValid()
-//		if err != nil {
-//			logger.Warn("Parameters error: ", logger.Err(err), middleware.GCtxRequestIDField(c))
-//			response.Error(c, ecode.InvalidParams)
-//			return
-//		}
-//
-//		ctx := middleware.WrapCtx(c)
-//		shortLink, err := h.iDao.GetByCondition(ctx, &form.Conditions)
-//		if err != nil {
-//			if errors.Is(err, query.ErrNotFound) {
-//				logger.Warn("GetByCondition not found", logger.Err(err), logger.Any("form", form), middleware.GCtxRequestIDField(c))
-//				response.Error(c, ecode.NotFound)
-//			} else {
-//				logger.Error("GetByCondition error", logger.Err(err), logger.Any("form", form), middleware.GCtxRequestIDField(c))
-//				response.Output(c, ecode.InternalServerError.ToHTTPCode())
-//			}
-//			return
-//		}
-//
-//		data := &types.ShortLinkObjDetail{}
-//		err = copier.Copy(data, shortLink)
-//		if err != nil {
-//			response.Error(c, ecode.ErrGetByIDShortLink)
-//			return
-//		}
-//		data.ID = utils.Uint64ToStr(uint64(shortLink.ID))
-//
-//		response.Success(c, gin.H{"shortLink": data})
-//	}
-//
-// // ListByIDs list of records by batch id
-// // @Summary list of shortLinks by batch id
-// // @Description list of shortLinks by batch id
-// // @Tags shortLink
-// // @Param data body types.ListShortLinksByIDsRequest true "id array"
-// // @Accept json
-// // @Produce json
-// // @Success 200 {object} types.ListShortLinksByIDsRespond{}
-// // @RedirectInfo /api/v1/shortLink/list/ids [post]
-//
-//	func (h *shortLinkHandler) ListByIDs(c *gin.Context) {
-//		form := &types.ListShortLinksByIDsRequest{}
-//		err := c.ShouldBindJSON(form)
-//		if err != nil {
-//			logger.Warn("ShouldBindJSON error: ", logger.Err(err), middleware.GCtxRequestIDField(c))
-//			response.Error(c, ecode.InvalidParams.WithOutMsg("参数错误"), "详细错误信息")
-//			response.Output(c, ecode.Unauthorized.WithOutMsg("错误简单描述").ToHTTPCode(), "详细错误信息")
-//			return
-//		}
-//
-//		ctx := middleware.WrapCtx(c)
-//		shortLinkMap, err := h.iDao.GetByIDs(ctx, form.IDs)
-//		if err != nil {
-//			logger.Error("GetByIDs error", logger.Err(err), logger.Any("form", form), middleware.GCtxRequestIDField(c))
-//			response.Output(c, ecode.InternalServerError.ToHTTPCode())
-//			return
-//		}
-//
-//		var shortLinks []*types.ShortLinkObjDetail
-//		for _, id := range form.IDs {
-//			if v, ok := shortLinkMap[id]; ok {
-//				record, err := convertShortLink(v)
-//				if err != nil {
-//					response.Error(c, ecode.ErrListShortLink)
-//					return
-//				}
-//				shortLinks = append(shortLinks, record)
-//			}
-//		}
-//
-//		response.Success(c, gin.H{
-//			"shortLinks": shortLinks,
-//		})
-//	}
-//
-// // ListByLastID get records by last id and limit
-// // @Summary list of shortLinks by last id and limit
-// // @Description list of shortLinks by last id and limit
-// // @Tags shortLink
-// // @accept json
-// // @Produce json
-// // @Param lastID query int true "last id, default is MaxInt64"
-// // @Param limit query int false "size in each page" default(10)
-// // @Param sort query string false "sort by column name of table, and the "-" sign before column name indicates reverse order" default(-id)
-// // @Success 200 {object} types.ListShortLinksRespond{}
-// // @RedirectInfo /api/v1/shortLink/list [get]
-//
-//	func (h *shortLinkHandler) ListByLastID(c *gin.Context) {
-//		lastID := utils.StrToUint64(c.Query("lastID"))
-//		if lastID == 0 {
-//			lastID = math.MaxInt64
-//		}
-//		limit := utils.StrToInt(c.Query("limit"))
-//		if limit == 0 {
-//			limit = 10
-//		}
-//		sort := c.Query("sort")
-//
-//		ctx := middleware.WrapCtx(c)
-//		shortLinks, err := h.iDao.GetByLastID(ctx, lastID, limit, sort)
-//		if err != nil {
-//			logger.Error("GetByLastID error", logger.Err(err), logger.Uint64("latsID", lastID), logger.Int("limit", limit), middleware.GCtxRequestIDField(c))
-//			response.Output(c, ecode.InternalServerError.ToHTTPCode())
-//			return
-//		}
-//
-//		data, err := convertShortLinks(shortLinks)
-//		if err != nil {
-//			response.Error(c, ecode.ErrListByLastIDShortLink)
-//			return
-//		}
-//
-//		response.Success(c, gin.H{
-//			"shortLinks": data,
-//		})
-//	}
-//
-// // List of records by query parameters
-// // @Summary list of shortLinks by query parameters
-// // @Description list of shortLinks by paging and conditions
-// // @Tags shortLink
-// // @accept json
-// // @Produce json
-// // @Param data body types.Params true "query parameters"
-// // @Success 200 {object} types.ListShortLinksRespond{}
-// // @RedirectInfo /api/v1/shortLink/list [post]
-//
-//	func (h *shortLinkHandler) List(c *gin.Context) {
-//		form := &types.ListShortLinksRequest{}
-//		err := c.ShouldBindJSON(form)
-//		if err != nil {
-//			logger.Warn("ShouldBindJSON error: ", logger.Err(err), middleware.GCtxRequestIDField(c))
-//			response.Error(c, ecode.InvalidParams)
-//			return
-//		}
-//
-//		ctx := middleware.WrapCtx(c)
-//		shortLinks, total, err := h.iDao.GetByColumns(ctx, &form.Params)
-//		if err != nil {
-//			logger.Error("GetByColumns error", logger.Err(err), logger.Any("form", form), middleware.GCtxRequestIDField(c))
-//			response.Output(c, ecode.InternalServerError.ToHTTPCode())
-//			return
-//		}
-//
-//		data, err := convertShortLinks(shortLinks)
-//		if err != nil {
-//			response.Error(c, ecode.ErrListShortLink)
-//			return
-//		}
-//
-//		response.Success(c, gin.H{
-//			"shortLinks": data,
-//			"total":      total,
-//		})
-//	}
-//
-//	func getShortLinkIDFromPath(c *gin.Context) (string, uint64, bool) {
-//		idStr := c.Param("id")
-//		id, err := utils.StrToUint64E(idStr)
-//		if err != nil || id == 0 {
-//			logger.Warn("StrToUint64E error: ", logger.String("idStr", idStr), middleware.GCtxRequestIDField(c))
-//			return "", 0, true
-//		}
-//
-//		return idStr, id, false
-//	}
-//
-//	func convertShortLink(shortLink *model.ShortLink) (*types.ShortLinkObjDetail, error) {
-//		data := &types.ShortLinkObjDetail{}
-//		err := copier.Copy(data, shortLink)
-//		if err != nil {
-//			return nil, err
-//		}
-//		data.ID = utils.Uint64ToStr(uint64(shortLink.ID))
-//		return data, nil
-//	}
-//
-//	func convertShortLinks(fromValues []*model.ShortLink) ([]*types.ShortLinkObjDetail, error) {
-//		var toValues []*types.ShortLinkObjDetail
-//		for _, v := range fromValues {
-//			data, err := convertShortLink(v)
-//			if err != nil {
-//				return nil, err
-//			}
-//			toValues = append(toValues, data)
-//		}
-//
-//		return toValues, nil
-//	}
-//
+// List 分页查询短链接
+// @Summary 分页查询短链接
+// @Description 分页查询短链接
+// @Tags shortLink
+// @Accept application/json
+// @Produce application/json
+// @Param Authorization header string true "token"
+// @Param gid query string false "组id"
+// @Param current query int false "当前页"
+// @Param size query int false "每页大小"
+// @Param orderTag query string false "排序"
+func (h *shortLinkHandler) List(c *gin.Context) {
+
+	gid := c.Query("gid")
+	currentStr := c.DefaultQuery("current", "1")
+	sizeStr := c.DefaultQuery("size", "10")
+	orderTag := c.Query("orderTag")
+	size, err := strconv.Atoi(sizeStr)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	current, err := strconv.Atoi(currentStr)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	ctx := middleware.WrapCtx(c)
+
+	//查询
+	total, list, err := h.iDao.List(ctx, gid, current, size)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	//转换
+	//todo 统计信息
+	fmt.Println(orderTag)
+	//todo 分页信息
+	res := types.ListShortLinkResponse{
+		Total:   total,
+		Size:    size,
+		Current: current,
+	}
+	//todo 将统计信息并入到返回值中
+	res.Records = make([]*types.ShortLinkRecord, 0, res.Total)
+	l := len(list)
+	for i := 0; i < l; i++ {
+		res.Records = append(res.Records, &types.ShortLinkRecord{
+			OriginUrl:     list[i].OriginUrl,
+			ShortUrl:      makeFullShortURL(Domain, list[i].Uri),
+			ValidDateType: list[i].ValidDateType,
+			ValidDate:     list[i].ValidTime.Format("2006-01-02 15:04:05"),
+			Describe:      list[i].Description,
+		})
+	}
+
+	serialize.NewResponse(200, serialize.WithData(res)).ToJSON(c)
+}
+
+// Delete 删除短链接
+// @Summary 删除短链接
+// @Description 删除短链接
+// @Tags shortLink
+// @Accept application/json
+// @Produce application/json
+// @Param Authorization header string true "token"
+// @Param uri path string true "短链接"
+func (h *shortLinkHandler) Delete(c *gin.Context) {
+	uri := c.Param("uri")
+	if uri == "" {
+		serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithMsg("uri不能为空")).ToJSON(c)
+		return
+	}
+	ctx := middleware.WrapCtx(c)
+	err := h.iDao.Delete(ctx, uri)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	serialize.NewResponse(200).ToJSON(c)
+}
+
 // makeFullShortURL 生成完整的短链接
 func makeFullShortURL(domain, uri string) string {
 	//此处配置从配置文件中获取
