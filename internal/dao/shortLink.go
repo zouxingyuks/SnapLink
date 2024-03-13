@@ -62,11 +62,17 @@ func (d *shortLinkDao) Create(ctx context.Context, shortLink *model.ShortLink) e
 func (d *shortLinkDao) List(ctx context.Context, gid string, page, pageSize int) (int, []*model.ShortLink, error) {
 	var list []*model.ShortLink
 	tableName := (&model.ShortLink{Gid: gid}).TName()
-	//todo 尝试使用大数据来去进行测试
 	var ids []uint
-	err := d.db.WithContext(ctx).Table(tableName).Select("id").Where("gid = ?", gid).Find(&ids).Error
 	sql := fmt.Sprintf("SELECT * FROM %s WHERE id IN (?) LIMIT ?,?", tableName)
-	err = d.db.WithContext(ctx).Raw(sql, ids, (page-1)*pageSize, pageSize).Scan(&list).Error
+	//使用事务
+	err := d.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		err := tx.Table(tableName).Select("id").Where("gid = ?", gid).Find(&ids).Error
+		if err != nil {
+			return err
+		}
+		err = tx.Raw(sql, ids, (page-1)*pageSize, pageSize).Scan(&list).Error
+		return err
+	})
 	return len(ids), list, err
 }
 
