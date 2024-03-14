@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"SnapLink/internal/bloomFilter"
 	"SnapLink/internal/cache"
+	"SnapLink/internal/config"
 	"SnapLink/internal/dao"
 	"SnapLink/internal/ecode"
 	"SnapLink/internal/model"
@@ -23,22 +25,14 @@ import (
 
 var _ ShortLinkHandler = (*shortLinkHandler)(nil)
 
-// todo  将短链接的域名改为配置文件中的域名
 var Domain = "localhost"
 
 // ShortLinkHandler defining the handler interface
 type ShortLinkHandler interface {
 	Create(c *gin.Context)
+	CreateBatch(c *gin.Context)
 	List(c *gin.Context)
 	Delete(c *gin.Context)
-	//CreateBatch(c *gin.Context)
-	//DeleteByID(c *gin.Context)
-	//DeleteByIDs(c *gin.Context)
-	//UpdateByID(c *gin.Context)
-	//GetByID(c *gin.Context)
-	//GetByCondition(c *gin.Context)
-	//ListByIDs(c *gin.Context)
-	//ListByLastID(c *gin.Context)
 }
 
 type shortLinkHandler struct {
@@ -52,22 +46,8 @@ func NewShortLinkHandler() ShortLinkHandler {
 			cache.NewShortLinkCache(model.GetCacheType()),
 		),
 	}
-	h.makeShortLinkBF()
+	Domain = config.Get().App.Domain
 	return h
-}
-
-func (h *shortLinkHandler) makeShortLinkBF() {
-	//todo 此处改为远程配置
-	err := cache.BFCreate(context.Background(), "shortLink", 0.001, 1e9)
-	// 如果创建失败，说明已经存在，正常结束即可
-	// 如果创建成功，说明不存在，需要添加数据
-	if err == nil {
-		//todo implement me
-		// 此任务可以解耦,因为即使误判，也会被数据库的唯一索引拦截，因此可以异步执行
-		// 此处的布隆过滤器更多的是为了提升性能
-		panic("implement me")
-
-	}
 }
 
 // Create 创建短链接
@@ -140,6 +120,70 @@ func (h *shortLinkHandler) Create(c *gin.Context) {
 	fullShortURL := makeFullShortURL(Domain, sLink.Uri)
 	logger.Info("创建短链接成功", logger.Any("sLink", sLink), logger.String("fullShortURL", fullShortURL), middleware.GCtxRequestIDField(c))
 	serialize.NewResponse(200, serialize.WithData(fullShortURL)).ToJSON(c)
+}
+
+// CreateBatch
+// @Summary 批量创建短链接
+// @Description 批量创建短链接
+// @Tags shortLink
+// @Accept application/json
+// @Produce application/json
+// @Param Authorization header string true "Bearer token"
+// @Param
+func (h *shortLinkHandler) CreateBatch(c *gin.Context) {
+	forms := make([]*types.CreateShortLinkRequest, 0)
+	if err := c.ShouldBind(&forms); err != nil {
+		serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	l := len(forms)
+	shortLinks := make([]*model.ShortLink, 0, l)
+	for i := 0; i < l; i++ {
+		u, err := url.Parse(forms[i].OriginUrl)
+		if err != nil {
+			err = errors.Wrap(err, "url格式错误")
+			serialize.NewResponse(400, serialize.WithMsg("参数错误"), serialize.WithErr(err)).ToJSON(c)
+			return
+		}
+		//2. 生成短链接
+		sLink := &model.ShortLink{
+			Enable:        1,
+			Domain:        u.Host,
+			OriginUrl:     u.String(),
+			Gid:           forms[i].Gid,
+			Description:   forms[i].Description,
+			CreatedType:   forms[i].CreatedType,
+			ValidDateType: forms[i].ValidDateType,
+		}
+		if sLink.ValidDateType > 0 {
+			sLink.ValidTime, err = time.Parse("2006-01-02 15:04:05", forms[i].ValidDate)
+		}
+		if err != nil {
+			serialize.NewResponse(400, serialize.WithMsg("参数错误"), serialize.WithErr(err)).ToJSON(c)
+			return
+		}
+		//3. 生成hash
+		sLink.Uri = ToHash(u)
+
+		shortLinks = append(shortLinks, sLink)
+	}
+	ctx := middleware.WrapCtx(c)
+
+	// 特别对于唯一索引的错误进行处理
+	if sLink, err := h.iDao.CreateBatch(ctx, shortLinks); err != nil || sLink != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithMsg("短链接已经存在")).ToJSON(c)
+			return
+		}
+		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+
+	fullShortURLs := make([]string, 0, l)
+	for i := 0; i < l; i++ {
+		fullShortURLs = append(fullShortURLs, makeFullShortURL(Domain, shortLinks[i].Uri))
+	}
+	serialize.NewResponse(200, serialize.WithData(fullShortURLs)).ToJSON(c)
 }
 
 // List 分页查询短链接
@@ -247,7 +291,7 @@ func ToHash(u *url.URL) string {
 		// 同一域名下的短链接不能重复
 		data := makeFullShortURL(u.Host, uri)
 		//为了在布隆过滤器挂掉后仍然可以使用,忽略布隆过滤器的错误
-		exist, _ := cache.BFExists(context.Background(), "shortLink", data)
+		exist, _ := bloomFilter.BFExists(context.Background(), "uri", data)
 		//如果此数据已经存在，再次生成
 		if exist {
 			uri = GenerateShortLink.GenerateHash(u.Path)
@@ -256,7 +300,7 @@ func ToHash(u *url.URL) string {
 		// 误判的情况有
 		// 1. 误判为存在，但是实际不存在。这种情况可以无视
 		// 2. 误判为不存在，但是实际存在，这种情况可以基于数据库的唯一索引来解决。这种情况主要是由于部分短链接未被加载入布隆过滤器中。
-		_ = cache.BFAdd(context.Background(), "shortLink", data)
+		_ = bloomFilter.BFAdd(context.Background(), "shortLink", data)
 		break
 	}
 	return uri
