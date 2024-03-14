@@ -1,7 +1,7 @@
 package dao
 
 import (
-	"SnapLink/internal/cache"
+	"SnapLink/internal/bloomFilter"
 	"SnapLink/internal/model"
 	"SnapLink/pkg/db"
 	"context"
@@ -37,7 +37,7 @@ func (d *FixDao) RebulidBF() (errs []error) {
 	// 重建布隆过滤器
 	for name, fn := range bfs {
 		// 删除布隆过滤器
-		if err := cache.BFDelete(context.Background(), name); err != nil {
+		if err := bloomFilter.BFDelete(context.Background(), name); err != nil {
 			errs = append(errs, err)
 			return errs
 		}
@@ -58,7 +58,7 @@ func makeUsernameBF(db *gorm.DB) (bool, []error) {
 		Username string
 	}
 	//todo 此处改为远程配置
-	err := cache.BFCreate(context.Background(), usernameBF, 0.001, 1e9)
+	err := bloomFilter.BFCreate(context.Background(), usernameBF, 0.001, 1e9)
 	// 如果创建失败，说明已经存在，正常结束即可
 	// 如果创建成功，说明不存在，需要添加数据
 	if err == nil {
@@ -92,7 +92,7 @@ func makeUsernameBF(db *gorm.DB) (bool, []error) {
 					for i := 0; i < l; i++ {
 						usernames = append(usernames, records[i].Username)
 					}
-					err = cache.BFMAdd(context.Background(), usernameBF, usernames...)
+					err = bloomFilter.BFMAdd(context.Background(), usernameBF, usernames...)
 					if err != nil {
 						errs[id] = err
 						break
@@ -118,7 +118,7 @@ func makeUriBF(db *gorm.DB) (bool, []error) {
 		URI string
 	}
 	//todo 此处改为远程配置
-	err := cache.BFCreate(context.Background(), uriBF, 0.01, 1e9)
+	err := bloomFilter.BFCreate(context.Background(), uriBF, 0.01, 1e9)
 	if err == nil {
 		//记录日志
 		errs := make([]error, 0, model.RedirectShardingNum)
@@ -153,7 +153,7 @@ func makeUriBF(db *gorm.DB) (bool, []error) {
 					for i := 0; i < l; i++ {
 						uris = append(uris, records[i].URI)
 					}
-					err = cache.BFMAdd(context.Background(), uriBF, uris...)
+					err = bloomFilter.BFMAdd(context.Background(), uriBF, uris...)
 					if err != nil {
 						errs[id] = err
 						break
