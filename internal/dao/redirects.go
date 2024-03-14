@@ -1,6 +1,7 @@
 package dao
 
 import (
+	"SnapLink/internal/bloomFilter"
 	"SnapLink/internal/cache"
 	"SnapLink/internal/model"
 	"SnapLink/pkg/db"
@@ -40,7 +41,8 @@ func NewRedirectsDao(xCache RedirectsCache) *RedirectsDao {
 func (d *RedirectsDao) GetByURI(ctx context.Context, uri string) (*model.Redirect, error) {
 	// 使用布隆过滤器进行数据存在性判断
 	// 如果不存在，则直接返回
-	exist, err := cache.BFExists(ctx, "uri", uri)
+	// 此处使用布隆过滤器的原因是: 减少大量空值造成的缓存内存占用过大
+	exist, err := bloomFilter.BFExists(ctx, "uri", uri)
 	if !exist {
 		return nil, model.ErrRecordNotFound
 	}
@@ -79,14 +81,9 @@ func (d *RedirectsDao) GetByURI(ctx context.Context, uri string) (*model.Redirec
 				}
 				return nil, err
 			}
-			//  异步调用设置缓存
-			go func() {
-				//todo 设置缓存
-				//
-				//err = d.cache.Set(ctx, uri, record, cache.RedirectsExpireTime)
-				//todo 设置缓存失败，记录日志
-				logger.Err(errors.Wrap(err, "设置缓存失败"))
-			}()
+			// 设置缓存
+			err = d.cache.Set(ctx, uri, record, cache.RedirectsExpireTime)
+			logger.Err(errors.Wrap(err, "设置缓存失败"))
 			return record, nil
 		})
 		if err != nil {

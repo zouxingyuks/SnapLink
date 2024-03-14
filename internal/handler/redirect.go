@@ -1,29 +1,32 @@
 package handler
 
 import (
-	"SnapLink/assets"
 	"SnapLink/internal/cache"
 	"SnapLink/internal/dao"
 	"SnapLink/internal/model"
 	"SnapLink/pkg/serialize"
+	"context"
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 )
 
-var _ RedirectHandler = (*redirectHandler)(nil)
-
-type RedirectHandler interface {
-	Redirect(c *gin.Context)
-}
-type redirectHandler struct {
-	iDao dao.RedirectsDao
+// RedirectsDao defining the dao interface
+type RedirectsDao interface {
+	GetByURI(ctx context.Context, uri string) (*model.Redirect, error)
+	CleanUp(ctx context.Context)
 }
 
-func NewRedirectHandler() RedirectHandler {
-	return &redirectHandler{
+type RedirectHandler struct {
+	iDao RedirectsDao
+}
+
+func NewRedirectHandler() *RedirectHandler {
+	h := &RedirectHandler{
 		iDao: dao.NewRedirectsDao(
 			cache.NewRedirectsCache(model.GetCacheType()),
 		),
 	}
+	return h
 }
 
 // Redirect 访问短链接重定向到原始链接
@@ -35,13 +38,18 @@ func NewRedirectHandler() RedirectHandler {
 // @Param short_uri path string true "短链接"
 // @Success 302 {string} string "重定向到原始链接"
 // @Failure 400 {string} string "请求失败"
-// @Router /{short_uri} [get]
-func (h *redirectHandler) Redirect(c *gin.Context) {
-	shortUri := c.Param("short_uri")
+// @Router /{uri} [get]
+// 流程图: https://drive.google.com/file/d/1hAHa5ZzhMjueqcIlkjkpvrejxsdo0Qk_/view?usp=sharing
+func (h *RedirectHandler) Redirect(c *gin.Context) {
+	shortUri := c.Param("uri")
 	//获取 short_uri 对应的原始链接
 	ctx := c.Request.Context()
 	info, err := h.iDao.GetByURI(ctx, shortUri)
 	if err != nil {
+		if errors.Is(err, model.ErrRecordNotFound) {
+			serialize.NewResponse(404, serialize.WithMsg("短链接不存在")).ToJSON(c)
+			return
+		}
 		serialize.NewResponse(
 			400,
 			serialize.WithMsg("请求失败"),
@@ -49,10 +57,7 @@ func (h *redirectHandler) Redirect(c *gin.Context) {
 		).ToJSON(c)
 		return
 	}
-	if info.OriginalURL == "" {
-		c.HTML(200, assets.Path("html/page_not_found.html"), gin.H{})
-		return
-	}
+	c.Set("info", info)
 	// 进行重定向
 	c.Redirect(302, info.OriginalURL)
 }
