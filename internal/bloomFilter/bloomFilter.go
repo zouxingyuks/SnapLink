@@ -1,4 +1,4 @@
-package cache
+package bloomFilter
 
 import (
 	"SnapLink/internal/config"
