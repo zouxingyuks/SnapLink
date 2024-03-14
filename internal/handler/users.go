@@ -8,7 +8,6 @@ import (
 	"SnapLink/internal/types"
 	"SnapLink/internal/utils"
 	"SnapLink/pkg/serialize"
-	"context"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
@@ -31,26 +30,7 @@ func NewUsersHandler() (h *UsersHandler) {
 			cache.NewTUserCache(model.GetCacheType()),
 		),
 	}
-	h.makeUsernameBF()
 	return
-}
-
-func (h *UsersHandler) makeUsernameBF() {
-	//todo 此处改为远程配置
-	err := cache.BFCreate(context.Background(), "username", 0.001, 1e9)
-	// 如果创建失败，说明已经存在，正常结束即可
-	// 如果创建成功，说明不存在，需要添加数据
-	if err == nil {
-		//todo 后面此处尝试改为使用 消息队列配合binlog 来去同步数据
-
-		// 从数据库中获取所有的用户名
-		usernames, err := h.iDao.GetAllUserName(context.Background())
-		if err != nil {
-			panic(errors.Wrap(err, "get all username from db error"))
-		}
-		// 将所有的用户名添加到布隆过滤器中
-		err = cache.BFMAdd(context.Background(), "username", usernames...)
-	}
 }
 
 func getTUserUsernameFromPath(c *gin.Context) string {
