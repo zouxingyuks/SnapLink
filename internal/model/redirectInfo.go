@@ -1,0 +1,18 @@
+package model
+
+import (
+	"fmt"
+)
+
+type Redirect struct {
+	ID          int    `gorm:"column:id;primary_key;auto_increment;comment:'主键';not null" json:"-"`
+	Uri         string `gorm:"type:varchar(10);column:uri;commit:'生成短链接的uri';not null;index:idx_uri" json:"uri"`
+	Gid         string `gorm:"column:gid;comment:'组id';not null" json:"gid"`
+	OriginalURL string `gorm:"type:nvarchar(255);column:original_URL;comment:'原始链接';not null;" json:"originalURL"`
+}
+
+func (r Redirect) TName() string {
+	id := hash(r.Uri)
+	return fmt.Sprintf("redirect_%d", id%RedirectShardingNum)
+
+}

@@ -40,7 +40,7 @@ func NewShortLinkDao(xCache cache.ShortLinkCache) ShortLinkDao {
 // 2. 创建重定向
 // 3. 理论上来说,此处创建成功即为成功,缓存的更新不在此处进行
 func (d *shortLinkDao) Create(ctx context.Context, shortLink *model.ShortLink) error {
-	redirect := model.Redirect{
+	redirect := &model.Redirect{
 		Uri:         shortLink.Uri,
 		Gid:         shortLink.Gid,
 		OriginalURL: shortLink.OriginUrl,
