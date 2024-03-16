@@ -41,6 +41,8 @@ type Config struct {
 	NacosRd    NacosRd      `yaml:"nacosRd" json:"nacosRd"`
 	Redis      Redis        `yaml:"redis" json:"redis"`
 	BFRedis    BFRedis      `yaml:"bfRedis" json:"bfRedis"`
+	PFRedis    PFRedis      `yaml:"pfRedis" json:"pfRedis"`
+	RocketMQ   RocketMQ     `yaml:"rocketmq" json:"rocketmq"`
 }
 
 type Consul struct {
@@ -91,6 +93,7 @@ type App struct {
 	RegistryDiscoveryType string  `yaml:"registryDiscoveryType" json:"registryDiscoveryType"`
 	TracingSamplingRate   float64 `yaml:"tracingSamplingRate" json:"tracingSamplingRate"`
 	Version               string  `yaml:"version" json:"version"`
+	Domain                string  `yaml:"domain" json:"domain"`
 }
 
 type GrpcClient struct {
@@ -115,15 +118,21 @@ type Mysql struct {
 }
 
 type Redis struct {
+	Network      string `yaml:"network" json:"network"`
+	Addr         string `yaml:"addr" json:"addr"`
+	User         string `yaml:"user" json:"user"`
+	Password     string `yaml:"password" json:"password"`
+	DB           int    `yaml:"db" json:"db"`
 	DialTimeout  int    `yaml:"dialTimeout" json:"dialTimeout"`
-	Dsn          string `yaml:"dsn" json:"dsn"`
 	ReadTimeout  int    `yaml:"readTimeout" json:"readTimeout"`
 	WriteTimeout int    `yaml:"writeTimeout" json:"writeTimeout"`
 }
 
+// BFRedis 布隆过滤器配置
 type BFRedis struct {
 	Network      string `yaml:"network" json:"network"`
 	Addr         string `yaml:"addr" json:"addr"`
+	User         string `yaml:"user" json:"user"`
 	Password     string `yaml:"password" json:"password"`
 	DB           int    `yaml:"db" json:"db"`
 	MaxRetries   int    `yaml:"maxRetries" json:"maxRetries"`
@@ -132,11 +141,25 @@ type BFRedis struct {
 	WriteTimeout int    `yaml:"writeTimeout" json:"writeTimeout"`
 }
 
-type RabbitMQ struct {
+// PFRedis hyperloglog配置
+type PFRedis struct {
+	Network string `yaml:"network" json:"network"`
+	Addr    string `yaml:"addr" json:"addr"`
+	User    string `yaml:"user" json:"user"`
+
+	Password     string `yaml:"password" json:"password"`
+	DB           int    `yaml:"db" json:"db"`
+	MaxRetries   int    `yaml:"maxRetries" json:"maxRetries"`
+	DialTimeout  int    `yaml:"dialTimeout" json:"dialTimeout"`
+	ReadTimeout  int    `yaml:"readTimeout" json:"readTimeout"`
+	WriteTimeout int    `yaml:"writeTimeout" json:"writeTimeout"`
+}
+
+type RocketMQ struct {
 	Addr        string `yaml:"addr" json:"addr"`
 	User        string `yaml:"user" json:"user"`
 	Password    string `yaml:"password" json:"password"`
-	VirtualHost string `yaml:"vhost" json:"vhost"`
+	VirtualHost string `yaml:"virtualhost" json:"virtualhost"`
 }
 
 type Grpc struct {
