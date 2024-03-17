@@ -235,6 +235,7 @@ func (h *shortLinkHandler) List(c *gin.Context) {
 	l := len(list)
 	for i := 0; i < l; i++ {
 		res.Records = append(res.Records, &types.ShortLinkRecord{
+			CreatedAt:     list[i].CreatedAt.Format("2006-01-02 15:04:05"),
 			OriginUrl:     list[i].OriginUrl,
 			ShortUrl:      makeFullShortURL(Domain, list[i].Uri),
 			ValidDateType: list[i].ValidDateType,

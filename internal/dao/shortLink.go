@@ -16,6 +16,7 @@ var _ ShortLinkDao = (*shortLinkDao)(nil)
 // ShortLinkDao 定义接口
 type ShortLinkDao interface {
 	Create(ctx context.Context, table *model.ShortLink) error
+	CreateBatch(ctx context.Context, tables []*model.ShortLink) (*model.ShortLink, error)
 	List(ctx context.Context, gid string, page, pageSize int) (int, []*model.ShortLink, error)
 	Delete(ctx context.Context, uri string) error
 }
@@ -56,6 +57,34 @@ func (d *shortLinkDao) Create(ctx context.Context, shortLink *model.ShortLink) e
 	return err
 }
 
+// CreateBatch 批量创建短链接
+func (d *shortLinkDao) CreateBatch(ctx context.Context, tables []*model.ShortLink) (*model.ShortLink, error) {
+	// 事务
+	l := len(tables)
+	i := 0
+	err := d.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for i = 0; i < l; i++ {
+			redirect := &model.Redirect{
+				Uri:         tables[i].Uri,
+				Gid:         tables[i].Gid,
+				OriginalURL: tables[i].OriginUrl,
+			}
+			if err := tx.Table(redirect.TName()).Create(redirect).Error; err != nil {
+				return err
+			}
+			if err := tx.Table(tables[i].TName()).Create(tables[i]).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return tables[i], err
+
+	}
+	return nil, nil
+}
+
 // List 分页查询
 // 对于深分页情况进行优化
 // 1. 基于子查询进行优化
@@ -63,17 +92,25 @@ func (d *shortLinkDao) List(ctx context.Context, gid string, page, pageSize int)
 	var list []*model.ShortLink
 	tableName := (&model.ShortLink{Gid: gid}).TName()
 	var ids []uint
-	sql := fmt.Sprintf("SELECT * FROM %s WHERE id IN (?) LIMIT ?,?", tableName)
+	sql := fmt.Sprintf("SELECT * FROM %s WHERE id IN (?)", tableName)
+	total := new(int64)
 	//使用事务
 	err := d.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		err := tx.Table(tableName).Select("id").Where("gid = ?", gid).Find(&ids).Error
+		err := tx.Table(tableName).Where("gid = ?", gid).Count(total).Error
 		if err != nil {
 			return err
 		}
-		err = tx.Raw(sql, ids, (page-1)*pageSize, pageSize).Scan(&list).Error
+		err = tx.Table(tableName).Select("id").
+			Where("gid = ?", gid).
+			Limit(pageSize).Offset((page - 1) * pageSize).
+			Find(&ids).Error
+		if err != nil {
+			return err
+		}
+		err = tx.Raw(sql, ids).Scan(&list).Error
 		return err
 	})
-	return len(ids), list, err
+	return int(*total), list, err
 }
 
 // todo 封装一个计算完成的方法
