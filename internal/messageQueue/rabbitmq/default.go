@@ -1,7 +1,8 @@
-package messageQueue
+package rabbitmq
 
 import (
 	"SnapLink/internal/config"
+	"fmt"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-amqp/pkg/amqp"
 	"github.com/pkg/errors"
@@ -11,16 +12,16 @@ import (
 	"sync"
 )
 
-var rocketmq struct {
+var rabbitmq struct {
 	mq   *MQ
 	once sync.Once
 }
 
 func defaultMQ() *MQ {
-	rocketmq.once.Do(func() {
+	rabbitmq.once.Do(func() {
 		var err error
-		conf := config.Get().RocketMQ
-		// 初始化 rocketmq
+		conf := config.Get().RabbitMQ
+		// 初始化 rabbitmq
 		// 此处必须使用 url.URL，因为如果直接使用字符串拼接，会导致密码中的特殊字符被转义
 		u := url.URL{
 			Scheme: "amqp",
@@ -28,13 +29,14 @@ func defaultMQ() *MQ {
 			Host:   conf.Addr,
 			Path:   conf.VirtualHost,
 		}
-		rocketmq.mq, err = NewMQ(u.String(), new(LoggerAdapter))
+		fmt.Println(u.String())
+		rabbitmq.mq, err = NewMQ(u.String(), new(LoggerAdapter))
 		if err != nil {
 			// mq 初始化失败是十分严重的错误，所以这里使用了panic
-			logger.Panic(errors.Wrap(err, "init rocketmq...failed").Error())
+			logger.Panic(errors.Wrap(err, "init rabbitmq...failed").Error())
 		}
 	})
-	return rocketmq.mq
+	return rabbitmq.mq
 }
 
 // NewPublisher 创建发布者

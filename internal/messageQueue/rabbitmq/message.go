@@ -1,4 +1,4 @@
-package messageQueue
+package rabbitmq
 
 import (
 	"SnapLink/internal/model"
