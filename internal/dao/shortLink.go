@@ -6,6 +6,8 @@ import (
 	"SnapLink/pkg/db"
 	"context"
 	"fmt"
+	"github.com/pkg/errors"
+	"github.com/zhufuyi/sponge/pkg/logger"
 
 	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
@@ -17,7 +19,8 @@ var _ ShortLinkDao = (*shortLinkDao)(nil)
 type ShortLinkDao interface {
 	Create(ctx context.Context, table *model.ShortLink) error
 	CreateBatch(ctx context.Context, tables []*model.ShortLink) (*model.ShortLink, error)
-	List(ctx context.Context, gid string, page, pageSize int) (int, []*model.ShortLink, error)
+	List(ctx context.Context, gid string, page, pageSize int) ([]*model.ShortLink, error)
+	Count(ctx context.Context, gid string) (int64, error)
 	Delete(ctx context.Context, uri string) error
 }
 
@@ -52,7 +55,6 @@ func (d *shortLinkDao) Create(ctx context.Context, shortLink *model.ShortLink) e
 			return err
 		}
 		return tx.Table(shortLink.TName()).WithContext(ctx).Create(shortLink).Error
-
 	})
 	return err
 }
@@ -88,29 +90,61 @@ func (d *shortLinkDao) CreateBatch(ctx context.Context, tables []*model.ShortLin
 // List 分页查询
 // 对于深分页情况进行优化
 // 1. 基于子查询进行优化
-func (d *shortLinkDao) List(ctx context.Context, gid string, page, pageSize int) (int, []*model.ShortLink, error) {
+func (d *shortLinkDao) List(ctx context.Context, gid string, page, pageSize int) ([]*model.ShortLink, error) {
 	var list []*model.ShortLink
 	tableName := (&model.ShortLink{Gid: gid}).TName()
-	var ids []uint
-	sql := fmt.Sprintf("SELECT * FROM %s WHERE id IN (?)", tableName)
-	total := new(int64)
-	//使用事务
-	err := d.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		err := tx.Table(tableName).Where("gid = ?", gid).Count(total).Error
+	sql := fmt.Sprintf("SELECT * FROM %s WHERE gid =? AND id >= (SELECT id FROM %s WHERE gid = ? ORDER BY id LIMIT 1 OFFSET ?) LIMIT ?", tableName, tableName)
+	err := d.db.WithContext(ctx).Table(tableName).Raw(sql, gid, gid, (page-1)*pageSize, pageSize).Find(&list).Error
+	return list, err
+}
+
+// Count 计算总数
+func (d *shortLinkDao) Count(ctx context.Context, gid string) (int64, error) {
+	count, err := d.cache.GetCount(ctx, gid)
+	if err == nil {
+		return count, nil
+	}
+
+	if errors.Is(err, model.ErrCacheNotFound) {
+		val, err, _ := d.sfg.Do(gid, func() (interface{}, error) { //nolint
+			//  二次查询缓存，是否查到数据
+			count, err := d.cache.GetCount(ctx, gid)
+			if err == nil {
+				return count, nil
+			}
+			// 从数据库中查询
+			tableName := (&model.ShortLink{Gid: gid}).TName()
+			total := new(int64)
+			err = d.db.WithContext(ctx).Table(tableName).Where("gid = ?", gid).Count(total).Error
+			if err != nil {
+				// 设置空值来防御缓存穿透
+				if errors.Is(err, model.ErrRecordNotFound) {
+					err = d.cache.SetCacheWithNotFound(ctx, gid)
+					if err != nil {
+						return nil, err
+					}
+					return nil, model.ErrRecordNotFound
+				}
+				return nil, err
+			}
+			// 设置缓存
+			err = d.cache.SetCount(ctx, gid, *total)
+			if err != nil {
+				logger.Err(errors.Wrap(err, "设置缓存失败"))
+			}
+			return count, nil
+		})
 		if err != nil {
-			return err
+			return 0, err
 		}
-		err = tx.Table(tableName).Select("id").
-			Where("gid = ?", gid).
-			Limit(pageSize).Offset((page - 1) * pageSize).
-			Find(&ids).Error
-		if err != nil {
-			return err
+		total, ok := val.(int64)
+		if !ok {
+			return 0, model.ErrRecordNotFound
 		}
-		err = tx.Raw(sql, ids).Scan(&list).Error
-		return err
-	})
-	return int(*total), list, err
+		return total, nil
+	}
+	// 其他错误
+	return 0, err
 }
 
 // todo 封装一个计算完成的方法
