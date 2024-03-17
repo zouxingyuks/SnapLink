@@ -55,14 +55,11 @@ func (d *RedirectsDao) GetByURI(ctx context.Context, uri string) (*model.Redirec
 		return record, nil
 	}
 	if errors.Is(err, model.ErrCacheNotFound) {
-		// 为同一 uri，防止同时对 mysql 进行高并发访问
+		// 基于 singleflight 进行并发调用合并,主要的性能优化点在于:
+		//1. 减少数据库压力：通过合并请求，减少了对数据库的总体访问次数，从而降低了数据库的负载。
+		//2. 节省时间：避免了多次加锁解锁的过程，因为对于相同的资源只进行了一次查询，减少了时间消耗。
+		//3. 简化缓存策略：由于所有相同的请求都等待同一次查询结果，因此不再需要二次缓存查询，简化了缓存管理。
 		val, err, _ := d.sfg.Do(uri, func() (interface{}, error) { //nolint
-
-			// 二次查询缓存，是否查到数据
-			record, err = d.cache.Get(ctx, uri)
-			if err == nil {
-				return record, nil
-			}
 			record = &model.Redirect{
 				Uri:         uri,
 				Gid:         "",
@@ -83,7 +80,9 @@ func (d *RedirectsDao) GetByURI(ctx context.Context, uri string) (*model.Redirec
 			}
 			// 设置缓存
 			err = d.cache.Set(ctx, uri, record, cache.RedirectsExpireTime)
-			logger.Err(errors.Wrap(err, "设置缓存失败"))
+			if err != nil {
+				logger.Err(errors.Wrap(err, "设置缓存失败"))
+			}
 			return record, nil
 		})
 		if err != nil {

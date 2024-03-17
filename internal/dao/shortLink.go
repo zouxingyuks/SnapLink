@@ -93,7 +93,7 @@ func (d *shortLinkDao) CreateBatch(ctx context.Context, tables []*model.ShortLin
 func (d *shortLinkDao) List(ctx context.Context, gid string, page, pageSize int) ([]*model.ShortLink, error) {
 	var list []*model.ShortLink
 	tableName := (&model.ShortLink{Gid: gid}).TName()
-	sql := fmt.Sprintf("SELECT * FROM %s WHERE gid =? AND id >= (SELECT id FROM %s WHERE gid = ? ORDER BY id LIMIT 1 OFFSET ?) LIMIT ?", tableName, tableName)
+	sql := fmt.Sprintf("SELECT * FROM %s WHERE gid =? AND id >= (SELECT id FROM %s WHERE gid = ? ORDER BY id LIMIT 1 OFFSET ?) ORDER BY id LIMIT ?", tableName, tableName)
 	err := d.db.WithContext(ctx).Table(tableName).Raw(sql, gid, gid, (page-1)*pageSize, pageSize).Find(&list).Error
 	return list, err
 }
@@ -108,12 +108,12 @@ func (d *shortLinkDao) Count(ctx context.Context, gid string) (int64, error) {
 	if errors.Is(err, model.ErrCacheNotFound) {
 		val, err, _ := d.sfg.Do(gid, func() (interface{}, error) { //nolint
 			//  二次查询缓存，是否查到数据
-			count, err := d.cache.GetCount(ctx, gid)
+			count, err = d.cache.GetCount(ctx, gid)
 			if err == nil {
 				return count, nil
 			}
 			// 从数据库中查询
-			tableName := (&model.ShortLink{Gid: gid}).TName()
+			tableName := model.ShortLink{Gid: gid}.TName()
 			total := new(int64)
 			err = d.db.WithContext(ctx).Table(tableName).Where("gid = ?", gid).Count(total).Error
 			if err != nil {
