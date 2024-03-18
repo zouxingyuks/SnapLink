@@ -2,6 +2,7 @@ package routers
 
 import (
 	"SnapLink/internal/handler"
+	middleware2 "SnapLink/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/zhufuyi/sponge/pkg/gin/middleware"
 )
@@ -21,5 +22,5 @@ func fixRouter(group *gin.RouterGroup, h FixHandler) {
 	group = group.Group("/")
 	group.Use(middleware.Auth())
 	//重建布隆过滤器
-	group.GET("/fix/rebuildbf", h.RebulidBF)
+	group.GET("/fix/rebuildbf", middleware2.Sentinel("/fix/rebuildbf"), h.RebulidBF)
 }
