@@ -31,12 +31,14 @@ var Domain = "localhost"
 type ShortLinkHandler interface {
 	Create(c *gin.Context)
 	CreateBatch(c *gin.Context)
+	Update(c *gin.Context)
 	List(c *gin.Context)
 	Delete(c *gin.Context)
 }
 
 type shortLinkHandler struct {
-	iDao dao.ShortLinkDao
+	iDao     dao.ShortLinkDao
+	iDaoStat dao.LinkAccessStatisticDao
 }
 
 // NewShortLinkHandler creating the handler interface
@@ -112,13 +114,11 @@ func (h *shortLinkHandler) Create(c *gin.Context) {
 			serialize.NewResponse(500, serialize.WithMsg("短链接已经存在")).ToJSON(c)
 			return
 		}
-		logger.Error("Create error", logger.Err(err), logger.Any("sLink", sLink), middleware.GCtxRequestIDField(c))
 		serialize.NewResponse(500, serialize.WithMsg("创建失败"), serialize.WithErr(err)).ToJSON(c)
 		return
 	}
 
 	fullShortURL := makeFullShortURL(Domain, sLink.Uri)
-	logger.Info("创建短链接成功", logger.Any("sLink", sLink), logger.String("fullShortURL", fullShortURL), middleware.GCtxRequestIDField(c))
 	serialize.NewResponse(200, serialize.WithData(fullShortURL)).ToJSON(c)
 }
 
@@ -214,23 +214,39 @@ func (h *shortLinkHandler) List(c *gin.Context) {
 		return
 	}
 	ctx := middleware.WrapCtx(c)
+	var list []*model.ShortLink
 
-	//查询
-	total, list, err := h.iDao.List(ctx, gid, current, size)
+	//var statistics map[string]*model.LinkAccessStatisticBasic
+	if orderTag == "" {
+		//查询
+		list, err = h.iDao.List(ctx, gid, current, size)
+		if err != nil {
+			serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+			return
+		}
+		//查询基本统计数据
+		l := len(list)
+		uris := make([]string, 0, l)
+		for i := 0; i < l; i++ {
+			uris = append(uris, list[i].Uri)
+		}
+		//statistics, err = h.iDaoStat.GetBasicByUri(ctx, gid, uris)
+	} else {
+
+	}
+
+	total, err := h.iDao.Count(ctx, gid)
 	if err != nil {
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
 		return
 	}
+
 	//转换
-	//todo 统计信息
-	fmt.Println(orderTag)
-	//todo 分页信息
 	res := types.ListShortLinkResponse{
 		Total:   total,
 		Size:    size,
 		Current: current,
 	}
-	//todo 将统计信息并入到返回值中
 	res.Records = make([]*types.ShortLinkRecord, 0, res.Total)
 	l := len(list)
 	for i := 0; i < l; i++ {
@@ -241,6 +257,12 @@ func (h *shortLinkHandler) List(c *gin.Context) {
 			ValidDateType: list[i].ValidDateType,
 			ValidDate:     list[i].ValidTime.Format("2006-01-02 15:04:05"),
 			Describe:      list[i].Description,
+			//TodayPV:       statistics[list[i].Uri].TodayPv,
+			//TotalPV:       statistics[list[i].Uri].TotalPv,
+			//TodayUV:       statistics[list[i].Uri].TodayUv,
+			//TotalUV:       statistics[list[i].Uri].TotalUv,
+			//TodayUIP:      statistics[list[i].Uri].TodayUip,
+			//TotalUIP:      statistics[list[i].Uri].TotalUip,
 		})
 	}
 
@@ -270,6 +292,12 @@ func (h *shortLinkHandler) Delete(c *gin.Context) {
 	serialize.NewResponse(200).ToJSON(c)
 }
 
+func (h *shortLinkHandler) Update(c *gin.Context) {
+	form := new(types.UpdateShortLinkRequest)
+	fmt.Println(form)
+	//todo 更新短链接
+}
+
 // makeFullShortURL 生成完整的短链接
 func makeFullShortURL(domain, uri string) string {
 	//此处配置从配置文件中获取
@@ -289,19 +317,17 @@ func ToHash(u *url.URL) string {
 	// 尝试生成 10 次，直到生成不重复的hash
 	uri := GenerateShortLink.GenerateHash(u.Path)
 	for i := 1; i <= 10; i++ {
-		// 同一域名下的短链接不能重复
-		data := makeFullShortURL(u.Host, uri)
 		//为了在布隆过滤器挂掉后仍然可以使用,忽略布隆过滤器的错误
-		exist, _ := bloomFilter.BFExists(context.Background(), "uri", data)
+		exist, _ := bloomFilter.BFExists(context.Background(), "uri", uri)
 		//如果此数据已经存在，再次生成
 		if exist {
-			uri = GenerateShortLink.GenerateHash(u.Path)
+			uri = GenerateShortLink.GenerateHash(uri + u.Path)
 			continue
 		}
 		// 误判的情况有
 		// 1. 误判为存在，但是实际不存在。这种情况可以无视
 		// 2. 误判为不存在，但是实际存在，这种情况可以基于数据库的唯一索引来解决。这种情况主要是由于部分短链接未被加载入布隆过滤器中。
-		_ = bloomFilter.BFAdd(context.Background(), "shortLink", data)
+		_ = bloomFilter.BFAdd(context.Background(), "uri", uri)
 		break
 	}
 	return uri

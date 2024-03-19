@@ -2,9 +2,9 @@ package routers
 
 import (
 	"SnapLink/internal/handler"
-	"github.com/zhufuyi/sponge/pkg/gin/middleware"
-
+	middleware2 "SnapLink/internal/middleware"
 	"github.com/gin-gonic/gin"
+	"github.com/zhufuyi/sponge/pkg/gin/middleware"
 )
 
 func init() {
@@ -17,15 +17,13 @@ func shortLinkRouter(group *gin.RouterGroup, h handler.ShortLinkHandler) {
 	group = group.Group("/")
 	group.Use(middleware.Auth())
 	//创建短链接
-	group.POST("/create", h.Create)
-	////批量创建短链接
-	//group.POST("/create/batch", h.CreateBatch)
-	//group.DELETE("/shortLink/:id", h.DeleteByID)
-	//group.POST("/shortLink/delete/ids", h.DeleteByIDs)
-	//group.PUT("/shortLink/:id", h.UpdateByID)
-	//group.GET("/shortLink/:id", h.GetByID)
-	//group.POST("/shortLink/condition", h.GetByCondition)
-	//group.POST("/shortLink/list/ids", h.ListByIDs)
-	//group.GET("/shortLink/list", h.ListByLastID)
-	//group.POST("/shortLink/list", h.List)
+	group.POST("/shortlink", middleware2.Sentinel("POST /shortlink"), h.Create)
+	//批量创建短链接
+	group.POST("/shortlink/batch", h.CreateBatch)
+	//更新短链接
+	group.PUT("/shortlink/:uri", h.Update)
+	//分页查询短链接
+	group.GET("/shortlink/page", h.List)
+	//删除短链接
+	group.DELETE("/shortlink/:uri", h.Delete)
 }
