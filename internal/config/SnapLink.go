@@ -6,6 +6,12 @@ import (
 	"github.com/zhufuyi/sponge/pkg/conf"
 )
 
+const (
+	EnvProd = "prod"
+	EnvDev  = "dev"
+	EnvTest = "test"
+)
+
 var config *Config
 
 func Init(configFile string, fs ...func()) error {
@@ -42,7 +48,8 @@ type Config struct {
 	Redis      Redis        `yaml:"redis" json:"redis"`
 	BFRedis    BFRedis      `yaml:"bfRedis" json:"bfRedis"`
 	PFRedis    PFRedis      `yaml:"pfRedis" json:"pfRedis"`
-	RocketMQ   RocketMQ     `yaml:"rocketmq" json:"rocketmq"`
+	RabbitMQ   RabbitMQ     `yaml:"rocketmq" json:"rocketmq"`
+	Sentinel   Sentinel     `yaml:"sentinel" json:"sentinel"`
 }
 
 type Consul struct {
@@ -155,7 +162,7 @@ type PFRedis struct {
 	WriteTimeout int    `yaml:"writeTimeout" json:"writeTimeout"`
 }
 
-type RocketMQ struct {
+type RabbitMQ struct {
 	Addr        string `yaml:"addr" json:"addr"`
 	User        string `yaml:"user" json:"user"`
 	Password    string `yaml:"password" json:"password"`
@@ -187,4 +194,22 @@ type HTTP struct {
 	Port         int `yaml:"port" json:"port"`
 	ReadTimeout  int `yaml:"readTimeout" json:"readTimeout"`
 	WriteTimeout int `yaml:"writeTimeout" json:"writeTimeout"`
+}
+
+// Nacos 配置
+type Nacos struct {
+	ContextPath string `yaml:"contextPath" json:"contextPath"`
+	DataID      string `yaml:"dataID" json:"dataID"`
+	Format      string `yaml:"format" json:"format"`
+	Group       string `yaml:"group" json:"group"`
+	IPAddr      string `yaml:"ipAddr" json:"ipAddr"`
+	NamespaceID string `yaml:"namespaceID" json:"namespaceID"`
+	Port        int    `yaml:"port" json:"port"`
+	Scheme      string `yaml:"scheme" json:"scheme"`
+}
+
+// Sentinel 配置
+type Sentinel struct {
+	SourceType string `yaml:"sourceType" json:"sourceType"`
+	Nacos      Nacos  `yaml:"nacos" json:"nacos"`
 }
