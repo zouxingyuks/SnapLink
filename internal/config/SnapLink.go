@@ -4,6 +4,7 @@ package config
 
 import (
 	"github.com/zhufuyi/sponge/pkg/conf"
+	"time"
 )
 
 const (
@@ -35,21 +36,22 @@ func Set(conf *Config) {
 }
 
 type Config struct {
-	App        App          `yaml:"app" json:"app"`
-	Consul     Consul       `yaml:"consul" json:"consul"`
-	Etcd       Etcd         `yaml:"etcd" json:"etcd"`
-	Grpc       Grpc         `yaml:"grpc" json:"grpc"`
-	GrpcClient []GrpcClient `yaml:"grpcClient" json:"grpcClient"`
-	HTTP       HTTP         `yaml:"http" json:"http"`
-	Jaeger     Jaeger       `yaml:"jaeger" json:"jaeger"`
-	Logger     Logger       `yaml:"logger" json:"logger"`
-	Mysql      Mysql        `yaml:"mysql" json:"mysql"`
-	NacosRd    NacosRd      `yaml:"nacosRd" json:"nacosRd"`
-	Redis      Redis        `yaml:"redis" json:"redis"`
-	BFRedis    BFRedis      `yaml:"bfRedis" json:"bfRedis"`
-	PFRedis    PFRedis      `yaml:"pfRedis" json:"pfRedis"`
-	RabbitMQ   RabbitMQ     `yaml:"rocketmq" json:"rocketmq"`
-	Sentinel   Sentinel     `yaml:"sentinel" json:"sentinel"`
+	App           App           `yaml:"app" json:"app"`
+	Consul        Consul        `yaml:"consul" json:"consul"`
+	Etcd          Etcd          `yaml:"etcd" json:"etcd"`
+	Grpc          Grpc          `yaml:"grpc" json:"grpc"`
+	GrpcClient    []GrpcClient  `yaml:"grpcClient" json:"grpcClient"`
+	HTTP          HTTP          `yaml:"http" json:"http"`
+	Jaeger        Jaeger        `yaml:"jaeger" json:"jaeger"`
+	Logger        Logger        `yaml:"logger" json:"logger"`
+	Mysql         Mysql         `yaml:"mysql" json:"mysql"`
+	NacosRd       NacosRd       `yaml:"nacosRd" json:"nacosRd"`
+	Redis         Redis         `yaml:"redis" json:"redis"`
+	BFRedis       BFRedis       `yaml:"bfRedis" json:"bfRedis"`
+	PFRedis       PFRedis       `yaml:"pfRedis" json:"pfRedis"`
+	RabbitMQ      RabbitMQ      `yaml:"rocketmq" json:"rocketmq"`
+	Sentinel      Sentinel      `yaml:"sentinel" json:"sentinel"`
+	Elasticsearch Elasticsearch `yaml:"elasticsearch" json:"elasticsearch"`
 }
 
 type Consul struct {
@@ -212,4 +214,26 @@ type Nacos struct {
 type Sentinel struct {
 	SourceType string `yaml:"sourceType" json:"sourceType"`
 	Nacos      Nacos  `yaml:"nacos" json:"nacos"`
+}
+
+// Elasticsearch 配置
+type Elasticsearch struct {
+	Addresses                []string      `json:"addresses"`                   // Elasticsearch节点的地址列表。
+	Username                 string        `json:"username"`                    // HTTP基本认证的用户名。
+	Password                 string        `json:"password"`                    // HTTP基本认证的密码。
+	CloudID                  string        `json:"cloud_id"`                    // Elastic服务的端点。
+	APIKey                   string        `json:"api_key"`                     // 授权用的Base64编码令牌。
+	ServiceToken             string        `json:"service_token"`               // 授权用的服务令牌。
+	CertificateFingerprint   string        `json:"certificate_fingerprint"`     // Elasticsearch首次启动时给出的SHA256十六进制指纹。
+	RetryOnStatus            []int         `json:"retry_on_status"`             // 重试的状态码列表。
+	DisableRetry             bool          `json:"disable_retry"`               // 是否禁用重试。
+	MaxRetries               int           `json:"max_retries"`                 // 最大重试次数。
+	CompressRequestBody      bool          `json:"compress_request_body"`       // 是否压缩请求体。
+	CompressRequestBodyLevel int           `json:"compress_request_body_level"` // 请求体压缩级别。
+	DiscoverNodesOnStart     bool          `json:"discover_nodes_on_start"`     // 初始化客户端时是否发现节点。
+	DiscoverNodesInterval    time.Duration `json:"discover_nodes_interval"`     // 定期发现节点的间隔时间。
+	EnableMetrics            bool          `json:"enable_metrics"`              // 是否启用指标收集。
+	EnableDebugLogger        bool          `json:"enable_debug_logger"`         // 是否启用调试日志。
+	EnableCompatibilityMode  bool          `json:"enable_compatibility_mode"`   // 是否发送兼容性头。
+	DisableMetaHeader        bool          `json:"disable_meta_header"`         // 是否禁用额外的“X-Elastic-Client-Meta”HTTP头。
 }
