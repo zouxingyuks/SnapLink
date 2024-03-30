@@ -1,12 +1,13 @@
 package dao
 
 import (
+	"SnapLink/internal/bloomFilter"
 	"SnapLink/internal/cache"
 	"SnapLink/internal/model"
-	"SnapLink/pkg/db"
 	"context"
 	"fmt"
 	"github.com/pkg/errors"
+	cacheBase "github.com/zhufuyi/sponge/pkg/cache"
 	"github.com/zhufuyi/sponge/pkg/logger"
 
 	"golang.org/x/sync/singleflight"
@@ -22,20 +23,25 @@ type ShortLinkDao interface {
 	List(ctx context.Context, gid string, page, pageSize int) ([]*model.ShortLink, error)
 	Count(ctx context.Context, gid string) (int64, error)
 	Delete(ctx context.Context, uri string) error
+	GeRedirectByURI(ctx context.Context, uri string) (*model.Redirect, error)
+	Update(ctx context.Context, shortLink *model.ShortLink) error
+	UpdateWithMove(ctx context.Context, shortLink *model.ShortLink, newGid string) error
 }
 
 type shortLinkDao struct {
-	db    *gorm.DB
-	cache cache.ShortLinkCache
-	sfg   *singleflight.Group
+	db            *gorm.DB
+	slCache       cache.ShortLinkCache
+	redirectCache cache.RedirectsCache
+	sfg           *singleflight.Group
 }
 
 // NewShortLinkDao 创建 shortLinkDao
-func NewShortLinkDao(xCache cache.ShortLinkCache) ShortLinkDao {
+func NewShortLinkDao() ShortLinkDao {
 	return &shortLinkDao{
-		db:    db.DB(),
-		cache: xCache,
-		sfg:   new(singleflight.Group),
+		db:            model.GetDB(),
+		slCache:       cache.NewShortLinkCache(model.GetCacheType()),
+		redirectCache: cache.NewRedirectsCache(model.GetCacheType()),
+		sfg:           new(singleflight.Group),
 	}
 }
 
@@ -100,7 +106,7 @@ func (d *shortLinkDao) List(ctx context.Context, gid string, page, pageSize int)
 
 // Count 计算总数
 func (d *shortLinkDao) Count(ctx context.Context, gid string) (int64, error) {
-	count, err := d.cache.GetCount(ctx, gid)
+	count, err := d.slCache.GetCount(ctx, gid)
 	if err == nil {
 		return count, nil
 	}
@@ -114,7 +120,7 @@ func (d *shortLinkDao) Count(ctx context.Context, gid string) (int64, error) {
 			if err != nil {
 				// 设置空值来防御缓存穿透
 				if errors.Is(err, model.ErrRecordNotFound) {
-					err = d.cache.SetCacheWithNotFound(ctx, gid)
+					err = d.slCache.SetCacheWithNotFound(ctx, gid)
 					if err != nil {
 						return nil, err
 					}
@@ -123,7 +129,7 @@ func (d *shortLinkDao) Count(ctx context.Context, gid string) (int64, error) {
 				return nil, err
 			}
 			// 设置缓存
-			err = d.cache.SetCount(ctx, gid, *total)
+			err = d.slCache.SetCount(ctx, gid, *total)
 			if err != nil {
 				logger.Err(errors.Wrap(err, "设置缓存失败"))
 			}
@@ -132,11 +138,11 @@ func (d *shortLinkDao) Count(ctx context.Context, gid string) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		total, ok := val.(int64)
+		total, ok := val.(*int64)
 		if !ok {
 			return 0, model.ErrRecordNotFound
 		}
-		return total, nil
+		return *total, nil
 	}
 	// 其他错误
 	return 0, err
@@ -164,4 +170,122 @@ func (d *shortLinkDao) Delete(ctx context.Context, uri string) error {
 		return err
 	})
 	return err
+}
+
+func (d *shortLinkDao) GeRedirectByURI(ctx context.Context, uri string) (*model.Redirect, error) {
+	// 使用布隆过滤器进行数据存在性判断
+	// 如果不存在，则直接返回
+	// 此处使用布隆过滤器的原因是: 减少大量空值造成的缓存内存占用过大
+	exist, err := bloomFilter.BFExists(ctx, "uri", uri)
+	if !exist {
+		return nil, model.ErrRecordNotFound
+	}
+	// 查询缓存，是否查到数据
+	record, err := d.redirectCache.Get(ctx, uri)
+	if err == nil {
+		if record.OriginalURL == "" {
+			return nil, model.ErrRecordNotFound
+		}
+		return record, nil
+	}
+	if errors.Is(err, model.ErrCacheNotFound) {
+		// 基于 singleflight 进行并发调用合并,主要的性能优化点在于:
+		//1. 减少数据库压力：通过合并请求，减少了对数据库的总体访问次数，从而降低了数据库的负载。
+		//2. 节省时间：避免了多次加锁解锁的过程，因为对于相同的资源只进行了一次查询，减少了时间消耗。
+		//3. 简化缓存策略：由于所有相同的请求都等待同一次查询结果，因此不再需要二次缓存查询，简化了缓存管理。
+		val, err, _ := d.sfg.Do(uri, func() (interface{}, error) { //nolint
+			record = &model.Redirect{
+				Uri:         uri,
+				Gid:         "",
+				OriginalURL: "",
+			}
+			// 使用 uri 进行查询,专门对 uri 做了索引优化
+			err = d.db.WithContext(ctx).Table(record.TName()).Where("uri = ?", uri).First(record).Error
+			if err != nil {
+				// 设置空值来防御缓存穿透
+				if errors.Is(err, model.ErrRecordNotFound) {
+					err = d.slCache.SetCacheWithNotFound(ctx, uri)
+					if err != nil {
+						return nil, err
+					}
+					return nil, model.ErrRecordNotFound
+				}
+				return nil, err
+			}
+			// 设置缓存
+			err = d.redirectCache.Set(ctx, uri, record, cache.RedirectsExpireTime)
+			if err != nil {
+				logger.Err(errors.Wrap(err, "设置缓存失败"))
+			}
+			return record, nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		info, ok := val.(*model.Redirect)
+		if !ok {
+			return nil, model.ErrRecordNotFound
+		}
+		return info, nil
+	} else if errors.Is(err, cacheBase.ErrPlaceholder) {
+		return nil, model.ErrRecordNotFound
+	}
+
+	// 快速失败，如果是其他错误，直接返回
+	return nil, err
+}
+
+// Update 更新短链接
+func (d *shortLinkDao) Update(ctx context.Context, shortLink *model.ShortLink) error {
+	redirect := &model.Redirect{
+		Uri:         shortLink.Uri,
+		Gid:         shortLink.Gid,
+		OriginalURL: shortLink.OriginUrl,
+	}
+	// 同时更新短链接和重定向
+	err := d.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Table(redirect.TName()).WithContext(ctx).
+			Where("uri = ?", redirect.Uri).Updates(redirect).Error; err != nil {
+			return err
+		}
+		return tx.Table(shortLink.TName()).WithContext(ctx).
+			Where("uri = ?", shortLink.Uri).Updates(shortLink).Error
+
+	})
+	return err
+
+}
+
+// UpdateWithMove 更新短链接
+// 取出短链接，移动到新的分组
+func (d *shortLinkDao) UpdateWithMove(ctx context.Context, shortLink *model.ShortLink, newGid string) error {
+	redirect := &model.Redirect{
+		Uri:         shortLink.Uri,
+		Gid:         newGid,
+		OriginalURL: shortLink.OriginUrl,
+	}
+	// 同时更新短链接和重定向
+	err := d.db.Transaction(func(tx *gorm.DB) error {
+		// redirect 路由可以直接更新
+		if err := tx.Table(redirect.TName()).WithContext(ctx).
+			Where("uri = ?", redirect.Uri).Updates(redirect).Error; err != nil {
+			return err
+		}
+		tableName := shortLink.TName()
+		// shortLink 需要先删除，再插入
+		// 定位到原来的短链接
+		if err := tx.Table(tableName).WithContext(ctx).Where("uri = ?", shortLink.Uri).Find(shortLink).Error; err != nil {
+			return err
+		}
+		// 硬删除原来的短链接
+		if err := tx.Table(tableName).WithContext(ctx).Where("id = ?", shortLink.ID).Unscoped().Delete(shortLink).Error; err != nil {
+			return err
+		}
+		// 插入新的短链接
+		shortLink.ID = 0
+		shortLink.Gid = newGid
+		return tx.Table(shortLink.TName()).WithContext(ctx).Create(shortLink).Error
+	})
+	return err
+
 }
