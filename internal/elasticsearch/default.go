@@ -2,6 +2,7 @@ package elasticsearch
 
 import (
 	"SnapLink/internal/config"
+	"context"
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/pkg/errors"
 	"github.com/zhufuyi/sponge/pkg/logger"
@@ -9,35 +10,36 @@ import (
 )
 
 var instance struct {
-	es   *elasticsearch.Client
+	es   *ES
 	once sync.Once
 }
 
-func Instance() *elasticsearch.Client {
+func esInstance() *ES {
 	instance.once.Do(
 		func() {
+			esConfig := config.Get().Elasticsearch
 			cfg := elasticsearch.Config{
-				Addresses:                config.Get().Elasticsearch.Addresses,
-				Username:                 config.Get().Elasticsearch.Username,
-				Password:                 config.Get().Elasticsearch.Password,
-				CloudID:                  config.Get().Elasticsearch.CloudID,
-				APIKey:                   config.Get().Elasticsearch.APIKey,
-				ServiceToken:             config.Get().Elasticsearch.ServiceToken,
-				CertificateFingerprint:   config.Get().Elasticsearch.CertificateFingerprint,
+				Addresses:                esConfig.Addresses,
+				Username:                 esConfig.Username,
+				Password:                 esConfig.Password,
+				CloudID:                  esConfig.CloudID,
+				APIKey:                   esConfig.APIKey,
+				ServiceToken:             esConfig.ServiceToken,
+				CertificateFingerprint:   esConfig.CertificateFingerprint,
 				Header:                   nil,
 				CACert:                   nil,
-				RetryOnStatus:            config.Get().Elasticsearch.RetryOnStatus,
-				DisableRetry:             config.Get().Elasticsearch.DisableRetry,
-				MaxRetries:               config.Get().Elasticsearch.MaxRetries,
+				RetryOnStatus:            esConfig.RetryOnStatus,
+				DisableRetry:             esConfig.DisableRetry,
+				MaxRetries:               esConfig.MaxRetries,
 				RetryOnError:             nil,
-				CompressRequestBody:      config.Get().Elasticsearch.CompressRequestBody,
-				CompressRequestBodyLevel: config.Get().Elasticsearch.CompressRequestBodyLevel,
-				DiscoverNodesOnStart:     config.Get().Elasticsearch.DiscoverNodesOnStart,
-				DiscoverNodesInterval:    config.Get().Elasticsearch.DiscoverNodesInterval,
-				EnableMetrics:            config.Get().Elasticsearch.EnableMetrics,
-				EnableDebugLogger:        config.Get().Elasticsearch.EnableDebugLogger,
-				EnableCompatibilityMode:  config.Get().Elasticsearch.EnableCompatibilityMode,
-				DisableMetaHeader:        config.Get().Elasticsearch.DisableMetaHeader,
+				CompressRequestBody:      esConfig.CompressRequestBody,
+				CompressRequestBodyLevel: esConfig.CompressRequestBodyLevel,
+				DiscoverNodesOnStart:     esConfig.DiscoverNodesOnStart,
+				DiscoverNodesInterval:    esConfig.DiscoverNodesInterval,
+				EnableMetrics:            esConfig.EnableMetrics,
+				EnableDebugLogger:        esConfig.EnableDebugLogger,
+				EnableCompatibilityMode:  esConfig.EnableCompatibilityMode,
+				DisableMetaHeader:        esConfig.DisableMetaHeader,
 				RetryBackoff:             nil,
 				Transport:                nil,
 				Logger:                   nil,
@@ -46,10 +48,15 @@ func Instance() *elasticsearch.Client {
 				Instrumentation:          nil,
 			}
 			var err error
-			instance.es, err = elasticsearch.NewClient(cfg)
+			instance.es, err = NewES(&cfg)
 			if err != nil {
-				logger.Panic(errors.Wrap(err, "failed to create elasticsearch client").Error())
+				logger.Panic(errors.Wrap(err, "init default es failed").Error())
 			}
 		})
 	return instance.es
+}
+
+// Search ES 搜索 API
+func Search(ctx context.Context, index string, body any, parser ResponseParse) (map[string]any, error) {
+	return esInstance().Search(ctx, index, body, parser)
 }
