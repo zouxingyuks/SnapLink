@@ -1,0 +1,63 @@
+version: '3.7'
+services:
+  rabbitmq:
+    image: rabbitmq:latest
+    container_name: snaplink-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    restart: always
+    hostname: snaplink-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: password.123
+    volumes:
+      - "/home/anubis/docker_data/snaplink/rabbitmq:/var/lib/rabbitmq"
+    networks:
+      - snaplink_net
+  mysql:
+    image: mysql:latest
+    container_name: snaplink-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "pjJdE#j:ovE-J:Vk1~?y"
+      MYSQL_DATABASE: saas  # 创建名为 saas 的数据库
+      MYSQL_USER: saas     # 创建名为 saas 的用户
+      MYSQL_PASSWORD: "vAm>~,A*Cdo9j#6@^*k3"  # 设置密码，这里替换成你想要的密码
+    volumes:
+      - "/home/anubis/docker_data/snaplink/mysql/conf:/etc/mysql/mysql.conf.d"
+      - "/home/anubis/docker_data/snaplink/mysql/log:/var/log/mysql"
+      - "/home/anubis/docker_data/snaplink/mysql/data:/var/lib/mysql"
+    networks:
+      - snaplink_net
+  nacos:
+    image: nacos/nacos-server:v2.1.1
+    container_name: snaplink-nacos
+    environment:
+      MODE: standalone
+      TIME_ZONE: Asia/Shanghai
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+
+  redis:
+    image: redis/redis-stack-server
+    container_name: snaplink-redis
+    ports:
+      - "6379:6379"
+      - "8001:8001"
+  maxwell:
+    container_name: snaplink-maxwell
+    image: zendesk/maxwell
+    command: bin/maxwell --config /etc/maxwell/config.properties
+    volumes:
+      - "/home/anubis/docker_data/snaplink/maxwell:/etc/maxwell/"
+    networks:
+      - snaplink_net
+networks:
+  snaplink_net:
+    driver: bridge
+volumes:
+  rocketmq_data:
+    driver: local
