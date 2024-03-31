@@ -10,7 +10,6 @@ import (
 	"SnapLink/internal/types"
 	"SnapLink/internal/utils/GenerateShortLink"
 	"SnapLink/pkg/serialize"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -220,6 +219,18 @@ func (h *shortLinkHandler) List(c *gin.Context) {
 	ctx := middleware.WrapCtx(c)
 	var list []*model.ShortLink
 	var uris []string
+	total, err := h.iDao.Count(ctx, gid)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+
+	//转换
+	res := types.ListShortLinkResponse{
+		Total:   total,
+		Size:    size,
+		Current: current,
+	}
 	if orderTag == "" {
 		//查询
 		list, err = h.iDao.List(ctx, gid, current, size)
@@ -233,98 +244,52 @@ func (h *shortLinkHandler) List(c *gin.Context) {
 		for i := 0; i < l; i++ {
 			uris = append(uris, list[i].Uri)
 		}
-		//statistics, err = h.iDaoStat.GetBasicByUri(ctx, gid, uris)
+		// 根据实际查询到的条数,进行数据钻取
+		res.Records = make([]*types.ShortLinkRecord, 0, l)
+		statics, err := searchTodayAccessStatic(ctx, uris)
+		if err != nil {
+			// 如果不是今日无数据，则返回错误
+			if !errors.Is(err, ErrBucketsIsEmpty) {
+				serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+				return
+			}
+		}
+		// 制造响应数据
+		for i := 0; i < l; i++ {
+			record := &types.ShortLinkRecord{
+				CreatedAt:     list[i].CreatedAt.Format("2006-01-02 15:04:05"),
+				OriginUrl:     list[i].OriginUrl,
+				ShortUrl:      makeFullShortURL(Domain, list[i].Uri),
+				ValidDateType: list[i].ValidDateType,
+				ValidDate:     list[i].ValidTime.Format("2006-01-02 15:04:05"),
+				Describe:      list[i].Description,
+			}
+			// 如果查询不到数据，则返回 0
+			if err == nil {
+				static, ok := statics[list[i].Uri].(map[string]any)
+				if ok {
+					record.TodayPV = int(static["today_pv"].(map[string]any)["value"].(float64))
+					record.TodayUV = int(static["today_uv"].(map[string]any)["value"].(float64))
+					record.TodayUIP = int(static["today_uip"].(map[string]any)["value"].(float64))
+				}
+
+			}
+			res.Records = append(res.Records, record)
+		}
 	} else {
 
-	}
-	total, err := h.iDao.Count(ctx, gid)
-	if err != nil {
-		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
-		return
-	}
-
-	//转换
-	res := types.ListShortLinkResponse{
-		Total:   total,
-		Size:    size,
-		Current: current,
-	}
-	res.Records = make([]*types.ShortLinkRecord, 0, res.Total)
-	l := len(list)
-	statics, err := searchStatic(ctx, uris)
-	if err != nil {
-		// 如果不是今日无数据，则返回错误
-		if !errors.Is(err, ErrBucketsIsEmpty) {
-			serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
-			return
-		}
-	}
-	// 制造返回数据
-	for i := 0; i < l; i++ {
-		record := &types.ShortLinkRecord{
-			CreatedAt:     list[i].CreatedAt.Format("2006-01-02 15:04:05"),
-			OriginUrl:     list[i].OriginUrl,
-			ShortUrl:      makeFullShortURL(Domain, list[i].Uri),
-			ValidDateType: list[i].ValidDateType,
-			ValidDate:     list[i].ValidTime.Format("2006-01-02 15:04:05"),
-			Describe:      list[i].Description,
-		}
-		// 如果查询不到数据，则返回 0
-		if err == nil {
-			static, ok := statics[list[i].Uri].(map[string]any)
-			if ok {
-				record.TodayPV = int(static["today_pv"].(map[string]any)["value"].(float64))
-				record.TodayUV = int(static["today_uv"].(map[string]any)["value"].(float64))
-				record.TodayUIP = int(static["today_uip"].(map[string]any)["value"].(float64))
-			}
-
-		}
-
-		res.Records = append(res.Records, record)
-		//data, err := instance.Search(
-		//	instance.Search.WithContext(context.Background()),
-		//	instance.Search.WithIndex("logstash-accesslog-2024.03.30.17/_alias"),
-		//	instance.Search.WithQuery(query),
-		//	instance.Search.WithPretty(),
-		//)
 	}
 
 	serialize.NewResponse(200, serialize.WithData(res)).ToJSON(c)
 }
 
 var (
-	arrgs = map[string]any{
-		"statics": map[string]any{
-			"terms": map[string]any{
-				"field": "info.uri.keyword",
-			},
-			"aggs": map[string]any{
-				"today_pv": map[string]any{
-					"value_count": map[string]any{
-						"field": "info.uri.keyword",
-					},
-				},
-				"today_uip": map[string]any{
-					"cardinality": map[string]any{
-						"field": "ip.keyword",
-					},
-				},
-				"today_uv": map[string]any{
-					"cardinality": map[string]any{
-						"field": "uid.keyword",
-					},
-				},
-			},
-		},
-	}
 	ErrBucketsIsEmpty = errors.New("buckets is empty")
 )
 
 // 去 ES 中查询访问情况
-func searchStatic(ctx context.Context, uris []string) (map[string]any, error) {
+func searchTodayAccessStatic(ctx context.Context, uris []string) (map[string]any, error) {
 	// 获取 ES 实例
-	instance := elasticsearch.Instance()
-
 	body := map[string]any{
 		"size":    0,
 		"_source": false,
@@ -333,44 +298,37 @@ func searchStatic(ctx context.Context, uris []string) (map[string]any, error) {
 				"info.uri.keyword": uris,
 			},
 		},
-		"aggs": arrgs,
+		"aggs": map[string]any{
+			"statics": map[string]any{
+				"terms": map[string]any{
+					"field": "info.uri.keyword",
+				},
+				"aggs": map[string]any{
+					"today_pv": map[string]any{
+						"value_count": map[string]any{
+							"field": "info.uri.keyword",
+						},
+					},
+					"today_uip": map[string]any{
+						"cardinality": map[string]any{
+							"field": "ip.keyword",
+						},
+					},
+					"today_uv": map[string]any{
+						"cardinality": map[string]any{
+							"field": "uid.keyword",
+						},
+					},
+				},
+			},
+		},
 	}
-
-	buf := new(bytes.Buffer)
-	if err := json.NewEncoder(buf).Encode(body); err != nil {
-		return nil, errors.Wrap(err, "Error encoding query")
-	}
-
 	index := fmt.Sprintf("logstash-accesslog-%s.*", time.Now().Format("2006.01.02"))
-	data, err := instance.Search(
-		instance.Search.WithContext(ctx),
-		instance.Search.WithIndex(index),
-		instance.Search.WithBody(buf),
-		instance.Search.WithPretty(),
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "查询ES失败")
-	}
-	defer data.Body.Close()
-
-	if data.IsError() {
-		return nil, decodeErrorResponse(data.Body, data.Status())
-	}
-
-	return decodeSuccessResponse(data.Body)
+	return elasticsearch.Search(ctx, index, body, accessStaticResponseParser)
 }
 
-// decodeErrorResponse 解析错误响应
-func decodeErrorResponse(body io.ReadCloser, status string) error {
-	var e map[string]interface{}
-	if err := json.NewDecoder(body).Decode(&e); err != nil {
-		return errors.Wrap(err, "解析错误响应失败")
-	}
-	return errors.New(fmt.Sprintf("[%s] %s: %s", status, e["error"].(map[string]interface{})["type"], e["error"].(map[string]interface{})["reason"]))
-}
-
-// decodeSuccessResponse 处理成功响应
-func decodeSuccessResponse(body io.ReadCloser) (map[string]any, error) {
+// accessStaticResponseParser 访问日志查询响应
+func accessStaticResponseParser(body io.ReadCloser) (map[string]any, error) {
 	var r map[string]interface{}
 	if err := json.NewDecoder(body).Decode(&r); err != nil {
 		return nil, errors.Wrap(err, "解析响应失败")
