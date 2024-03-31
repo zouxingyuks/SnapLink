@@ -3,10 +3,11 @@ package dao
 import (
 	"SnapLink/internal/bloomFilter"
 	"SnapLink/internal/model"
-	"SnapLink/pkg/db"
 	"context"
 	"fmt"
+	"github.com/pkg/errors"
 	"github.com/zhufuyi/sponge/pkg/logger"
+	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 	"sync"
 )
@@ -25,27 +26,39 @@ var bfs = map[string]bfMakeFn{
 }
 
 type FixDao struct {
-	db *gorm.DB
+	db  *gorm.DB
+	sfg *singleflight.Group
 }
 
 func NewFixDao() *FixDao {
 	return &FixDao{
-		db: db.DB(),
+		db:  model.GetDB(),
+		sfg: new(singleflight.Group),
 	}
 }
+
+// RebulidBF 重建布隆过滤器
 func (d *FixDao) RebulidBF() (errs []error) {
-	// 重建布隆过滤器
-	for name, fn := range bfs {
-		// 删除布隆过滤器
-		if err := bloomFilter.BFDelete(context.Background(), name); err != nil {
-			errs = append(errs, err)
-			return errs
+	// 后面还是需要进行限流的
+	// 重建布隆过滤器,使用 singleflight 来保证只有一个协程进行重建
+	val, err, _ := d.sfg.Do("RebulidBF", func() (interface{}, error) {
+		// 重建布隆过滤器
+		for name, fn := range bfs {
+			// 删除布隆过滤器
+			if err := bloomFilter.BFDelete(context.Background(), name); err != nil {
+				errs = append(errs, err)
+				return errs, errors.New(fmt.Sprintf("rebuild %s bloom filter failed", name))
+			}
+			// 重新创建布隆过滤器
+			ok, errs := fn(d.db)
+			if !ok {
+				return errs, errors.New(fmt.Sprintf("rebuild %s bloom filter failed", name))
+			}
 		}
-		// 重新创建布隆过滤器
-		ok, errs := fn(d.db)
-		if !ok {
-			return errs
-		}
+		return nil, nil
+	})
+	if err != nil {
+		return val.([]error)
 	}
 	return nil
 }
@@ -121,9 +134,10 @@ func makeUriBF(db *gorm.DB) (bool, []error) {
 	err := bloomFilter.BFCreate(context.Background(), uriBF, 0.01, 1e9)
 	if err == nil {
 		//记录日志
-		errs := make([]error, 0, model.RedirectShardingNum)
+		var errs = []error{}
 		wg := sync.WaitGroup{}
 		for i := 0; i < model.RedirectShardingNum; i++ {
+			errs = append(errs, nil)
 			tableName := fmt.Sprintf("redirect_%d", i)
 			wg.Add(1)
 			go func(id int, tName string) {
@@ -135,9 +149,9 @@ func makeUriBF(db *gorm.DB) (bool, []error) {
 				var cursor uint
 				for {
 
-					var records []redirect
+					records := make([]redirect, 0, 100)
 
-					err := db.Table(tName).Select("id, uri").Where("id > ?", cursor).Limit(1000).Scan(&records).Error
+					err := db.Table(tName).Select("id, uri").Where("id > ?", cursor).Limit(100).Scan(&records).Error
 
 					if err != nil {
 						logger.Err(err)

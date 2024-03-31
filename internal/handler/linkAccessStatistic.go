@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"SnapLink/internal/cache"
-	"SnapLink/internal/dao"
 	"SnapLink/internal/model"
 	"context"
 	"fmt"
@@ -24,8 +22,9 @@ type LinkAccessStatisticHandler struct {
 
 func NewLinkAccessStatisticHandler() *LinkAccessStatisticHandler {
 	h := &LinkAccessStatisticHandler{
-		iDao: dao.NewLinkAccessStatisticDao(
-			cache.NewLinkStatsCache(model.GetCacheType())),
+		//todo 实现
+		//iDao: dao.NewLinkAccessStatisticDao(
+		//	cache.NewLinkStatsCache(model.GetCacheType())),
 	}
 	return h
 }

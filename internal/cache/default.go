@@ -39,7 +39,16 @@ func Instance() *Cache {
 	return defaultInstance.cache
 }
 
-// Incr
+// Incr 自增
 func Incr(ctx context.Context, key string, value int64) error {
 	return Instance().client.IncrBy(ctx, key, value).Err()
+}
+
+// SetNX 设置值
+func SetNX(ctx context.Context, key string, value any, expiration time.Duration) (bool, error) {
+	return Instance().client.SetNX(ctx, key, value, expiration).Result()
+}
+
+func Del(ctx context.Context, keys ...string) error {
+	return Instance().client.Del(ctx, keys...).Err()
 }

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="0370e265-0010-4ed7-aa75-bedcf5065f73" name="aly">
+        <fileTransfer rootFolder="/home/anubis/items" accessType="SFTP" host="47.108.180.86" port="22" sshConfigId="ed5368a7-0bbc-4f8d-9290-8542c579b822" sshConfig="aly" authAgent="true">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

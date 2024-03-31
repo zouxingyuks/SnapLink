@@ -43,13 +43,13 @@ func NewShortLinkGroupCache(cacheType *model.CacheType) ShortLinkGroupCache {
 }
 
 // makeSLGroupKey 获取用户的 group 缓存 key
-func (c *shortLinkGroupsCache) makeSLGroupKey(username string) string {
+func makeSLGroupKey(username string) string {
 	return shortLinkGroupsCachePrefixKey + username
 }
 
 // ADD 添加用户的 group 缓存
 func (c *shortLinkGroupsCache) ADD(ctx context.Context, username string, group *model.ShortLinkGroup) error {
-	key := c.makeSLGroupKey(username)
+	key := makeSLGroupKey(username)
 	bytes, err := json.Marshal(group)
 	if err != nil {
 		return err
@@ -66,7 +66,7 @@ func (c *shortLinkGroupsCache) ADD(ctx context.Context, username string, group *
 
 // MADD 批量添加用户的 group 缓存
 func (c *shortLinkGroupsCache) MADD(ctx context.Context, username string, groups []*model.ShortLinkGroup) error {
-	key := c.makeSLGroupKey(username)
+	key := makeSLGroupKey(username)
 	pipeline := c.client.Pipeline()
 	for _, group := range groups {
 		bytes, err := json.Marshal(group)
@@ -84,7 +84,7 @@ func (c *shortLinkGroupsCache) MADD(ctx context.Context, username string, groups
 
 // SetEmpty 设置用户的 hash 缓存为空
 func (c *shortLinkGroupsCache) SetEmpty(ctx context.Context, username string) error {
-	key := c.makeSLGroupKey(username)
+	key := makeSLGroupKey(username)
 	return c.client.ZAddXX(ctx, key, &redis.Z{
 		Score:  0,
 		Member: shortLinkGroupCacheEmpty,
@@ -93,7 +93,7 @@ func (c *shortLinkGroupsCache) SetEmpty(ctx context.Context, username string) er
 
 // GetALL 获取用户的 hash 缓存
 func (c *shortLinkGroupsCache) GetALL(ctx context.Context, username string) ([]*model.ShortLinkGroup, error) {
-	key := c.makeSLGroupKey(username)
+	key := makeSLGroupKey(username)
 	data, err := c.client.ZRange(ctx, key, 0, -1).Result()
 	if err != nil {
 		return nil, err
@@ -119,6 +119,6 @@ func (c *shortLinkGroupsCache) GetALL(ctx context.Context, username string) ([]*
 
 // Del 删除用户的 hash 缓存
 func (c *shortLinkGroupsCache) Del(ctx context.Context, username string) error {
-	key := c.makeSLGroupKey(username)
+	key := makeSLGroupKey(username)
 	return c.client.Del(ctx, key).Err()
 }

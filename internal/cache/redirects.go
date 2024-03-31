@@ -19,27 +19,34 @@ const (
 	RedirectsNeverExpireTime = 0
 )
 
+// RedirectsCache slCache interface
+type RedirectsCache interface {
+	Set(ctx context.Context, uri string, info *model.Redirect, duration time.Duration) error
+	Get(ctx context.Context, uri string) (*model.Redirect, error)
+	SetCacheWithNotFound(ctx context.Context, uri string) error
+}
+
 var emptyRedirectBytes = []byte(`{"uri":"","original_url":""}`)
 
-// RedirectsCache define a cache struct
-type RedirectsCache struct {
+// redirectsCache define a cache struct
+type redirectsCache struct {
 	client *redis.Client
 }
 
 // NewRedirectsCache new a cache
-func NewRedirectsCache(cacheType *model.CacheType) *RedirectsCache {
-	return &RedirectsCache{
+func NewRedirectsCache(cacheType *model.CacheType) RedirectsCache {
+	return &redirectsCache{
 		client: cacheType.Rdb,
 	}
 }
 
 // GetRedirectsCacheKey cache key
-func (c *RedirectsCache) GetRedirectsCacheKey(uri string) string {
+func (c *redirectsCache) GetRedirectsCacheKey(uri string) string {
 	return redirectsCachePrefixKey + uri
 }
 
 // Set write to cache
-func (c *RedirectsCache) Set(ctx context.Context, uri string, redirect *model.Redirect, duration time.Duration) error {
+func (c *redirectsCache) Set(ctx context.Context, uri string, redirect *model.Redirect, duration time.Duration) error {
 	if redirect == nil || uri == "" {
 		return nil
 	}
@@ -50,7 +57,7 @@ func (c *RedirectsCache) Set(ctx context.Context, uri string, redirect *model.Re
 }
 
 // Get 获取缓存
-func (c *RedirectsCache) Get(ctx context.Context, uri string) (*model.Redirect, error) {
+func (c *redirectsCache) Get(ctx context.Context, uri string) (*model.Redirect, error) {
 	key := c.GetRedirectsCacheKey(uri)
 	jsonBytes, err := c.client.Get(ctx, key).Bytes()
 	if err != nil {
@@ -68,7 +75,7 @@ func (c *RedirectsCache) Get(ctx context.Context, uri string) (*model.Redirect, 
 }
 
 // SetCacheWithNotFound 设置不存在的缓存，以防止缓存穿透，默认过期时间 10 分钟
-func (c *RedirectsCache) SetCacheWithNotFound(ctx context.Context, uri string) error {
+func (c *redirectsCache) SetCacheWithNotFound(ctx context.Context, uri string) error {
 	key := c.GetRedirectsCacheKey(uri)
 	err := c.client.Set(ctx, key, emptyRedirectBytes, RedirectsExpireTime).Err()
 	if err != nil {

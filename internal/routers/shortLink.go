@@ -21,7 +21,7 @@ func shortLinkRouter(group *gin.RouterGroup, h handler.ShortLinkHandler) {
 	//批量创建短链接
 	group.POST("/shortlink/batch", h.CreateBatch)
 	//更新短链接
-	group.PUT("/shortlink/:uri", h.Update)
+	group.PUT("/shortlink", h.Update)
 	//分页查询短链接
 	group.GET("/shortlink/page", h.List)
 	//删除短链接

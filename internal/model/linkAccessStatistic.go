@@ -1,13 +1,15 @@
 package model
 
 import (
+	"fmt"
 	"gorm.io/gorm"
 )
 import "gorm.io/datatypes"
 
+// LinkAccessStatistic 此处进行垂直分表
 type LinkAccessStatistic struct {
 	gorm.Model `json:"-"`
-	URI        string         `gorm:"column:uri;type:varchar(255);commit:'访问链接';uniqueIndex:idx_query;index:idx_uri_date" json:"uri"`
+	URI        string         `gorm:"column:uri;type:varchar(255);comment:'访问链接';uniqueIndex:idx_query;index:idx_uri_date" json:"uri"`
 	Pv         int64          `gorm:"column:pv;type:bigint(20)" json:"pv"`
 	Uv         int64          `gorm:"column:uv;type:bigint(20)" json:"uv"`
 	Uip        int64          `gorm:"column:uip;type:bigint(20)" json:"uip"`
@@ -21,7 +23,8 @@ type LinkAccessStatistic struct {
 }
 
 func (l LinkAccessStatistic) TName() string {
-	return "link_access_statistics"
+	id := hash(l.URI)
+	return fmt.Sprintf("link_access_statistic_%d", id%LinkAccessStatisticShardingNum)
 }
 
 type LinkAccessStatisticDay struct {
@@ -30,4 +33,21 @@ type LinkAccessStatisticDay struct {
 	TodayUv  int64  `gorm:"today_uv" json:"today_uv"`
 	TodayUip int64  `gorm:"today_uip" json:"today_uip"`
 	Date     string `gorm:"date" json:"date"`
+}
+
+// LinkAccessStatisticBasic 用于存储基础数据,不存储详细数据
+type LinkAccessStatisticBasic struct {
+	gorm.Model `json:"-"`
+	URI        string `gorm:"column:uri;type:varchar(255);comment:'访问链接';uniqueIndex:idx_query;index:idx_uri_date" json:"uri"`
+	Pv         int64  `gorm:"column:pv;type:bigint(20)" json:"pv"`
+	Uv         int64  `gorm:"column:uv;type:bigint(20)" json:"uv"`
+	Uip        int64  `gorm:"column:uip;type:bigint(20)" json:"uip"`
+	Gid        string `gorm:"column:gid;comment:'组id';not null;index:idx_gid_uri" json:"gid"`
+	Date       string `gorm:"column:date;type:date;index:idx_uri_date" json:"date"`
+	Hour       int    `gorm:"column:hour;" json:"hour"`
+}
+
+func (l LinkAccessStatisticBasic) TName() string {
+	id := hash(l.Gid)
+	return fmt.Sprintf("link_access_statistic_basic_%d", id%LinkAccessStatisticShardingNum)
 }

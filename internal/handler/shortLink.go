@@ -2,20 +2,24 @@ package handler
 
 import (
 	"SnapLink/internal/bloomFilter"
-	"SnapLink/internal/cache"
 	"SnapLink/internal/config"
 	"SnapLink/internal/dao"
 	"SnapLink/internal/ecode"
+	"SnapLink/internal/elasticsearch"
 	"SnapLink/internal/model"
 	"SnapLink/internal/types"
 	"SnapLink/internal/utils/GenerateShortLink"
 	"SnapLink/pkg/serialize"
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/pkg/errors"
 	"gorm.io/gorm"
+	"io"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -37,16 +41,16 @@ type ShortLinkHandler interface {
 }
 
 type shortLinkHandler struct {
-	iDao     dao.ShortLinkDao
-	iDaoStat dao.LinkAccessStatisticDao
+	iDao dao.ShortLinkDao
 }
 
 // NewShortLinkHandler creating the handler interface
 func NewShortLinkHandler() ShortLinkHandler {
 	h := &shortLinkHandler{
-		iDao: dao.NewShortLinkDao(
-			cache.NewShortLinkCache(model.GetCacheType()),
-		),
+		iDao: dao.NewShortLinkDao(),
+		//iDaoStat: dao.NewLinkAccessStatisticDao(
+		//	cache.NewLinkAccessStatisticCache(model.GetCacheType()),
+		//),
 	}
 	Domain = config.Get().App.Domain
 	return h
@@ -215,8 +219,7 @@ func (h *shortLinkHandler) List(c *gin.Context) {
 	}
 	ctx := middleware.WrapCtx(c)
 	var list []*model.ShortLink
-
-	//var statistics map[string]*model.LinkAccessStatisticBasic
+	var uris []string
 	if orderTag == "" {
 		//查询
 		list, err = h.iDao.List(ctx, gid, current, size)
@@ -226,7 +229,7 @@ func (h *shortLinkHandler) List(c *gin.Context) {
 		}
 		//查询基本统计数据
 		l := len(list)
-		uris := make([]string, 0, l)
+		uris = make([]string, 0, l)
 		for i := 0; i < l; i++ {
 			uris = append(uris, list[i].Uri)
 		}
@@ -234,7 +237,6 @@ func (h *shortLinkHandler) List(c *gin.Context) {
 	} else {
 
 	}
-
 	total, err := h.iDao.Count(ctx, gid)
 	if err != nil {
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
@@ -249,24 +251,148 @@ func (h *shortLinkHandler) List(c *gin.Context) {
 	}
 	res.Records = make([]*types.ShortLinkRecord, 0, res.Total)
 	l := len(list)
+	statics, err := searchStatic(ctx, uris)
+	if err != nil {
+		// 如果不是今日无数据，则返回错误
+		if !errors.Is(err, ErrBucketsIsEmpty) {
+			serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+			return
+		}
+	}
+	// 制造返回数据
 	for i := 0; i < l; i++ {
-		res.Records = append(res.Records, &types.ShortLinkRecord{
+		record := &types.ShortLinkRecord{
 			CreatedAt:     list[i].CreatedAt.Format("2006-01-02 15:04:05"),
 			OriginUrl:     list[i].OriginUrl,
 			ShortUrl:      makeFullShortURL(Domain, list[i].Uri),
 			ValidDateType: list[i].ValidDateType,
 			ValidDate:     list[i].ValidTime.Format("2006-01-02 15:04:05"),
 			Describe:      list[i].Description,
-			//TodayPV:       statistics[list[i].Uri].TodayPv,
-			//TotalPV:       statistics[list[i].Uri].TotalPv,
-			//TodayUV:       statistics[list[i].Uri].TodayUv,
-			//TotalUV:       statistics[list[i].Uri].TotalUv,
-			//TodayUIP:      statistics[list[i].Uri].TodayUip,
-			//TotalUIP:      statistics[list[i].Uri].TotalUip,
-		})
+		}
+		// 如果查询不到数据，则返回 0
+		if err == nil {
+			static, ok := statics[list[i].Uri].(map[string]any)
+			if ok {
+				record.TodayPV = int(static["today_pv"].(map[string]any)["value"].(float64))
+				record.TodayUV = int(static["today_uv"].(map[string]any)["value"].(float64))
+				record.TodayUIP = int(static["today_uip"].(map[string]any)["value"].(float64))
+			}
+
+		}
+
+		res.Records = append(res.Records, record)
+		//data, err := instance.Search(
+		//	instance.Search.WithContext(context.Background()),
+		//	instance.Search.WithIndex("logstash-accesslog-2024.03.30.17/_alias"),
+		//	instance.Search.WithQuery(query),
+		//	instance.Search.WithPretty(),
+		//)
 	}
 
 	serialize.NewResponse(200, serialize.WithData(res)).ToJSON(c)
+}
+
+var (
+	arrgs = map[string]any{
+		"statics": map[string]any{
+			"terms": map[string]any{
+				"field": "info.uri.keyword",
+			},
+			"aggs": map[string]any{
+				"today_pv": map[string]any{
+					"value_count": map[string]any{
+						"field": "info.uri.keyword",
+					},
+				},
+				"today_uip": map[string]any{
+					"cardinality": map[string]any{
+						"field": "ip.keyword",
+					},
+				},
+				"today_uv": map[string]any{
+					"cardinality": map[string]any{
+						"field": "uid.keyword",
+					},
+				},
+			},
+		},
+	}
+	ErrBucketsIsEmpty = errors.New("buckets is empty")
+)
+
+// 去 ES 中查询访问情况
+func searchStatic(ctx context.Context, uris []string) (map[string]any, error) {
+	// 获取 ES 实例
+	instance := elasticsearch.Instance()
+
+	body := map[string]any{
+		"size":    0,
+		"_source": false,
+		"query": map[string]any{
+			"terms": map[string]any{
+				"info.uri.keyword": uris,
+			},
+		},
+		"aggs": arrgs,
+	}
+
+	buf := new(bytes.Buffer)
+	if err := json.NewEncoder(buf).Encode(body); err != nil {
+		return nil, errors.Wrap(err, "Error encoding query")
+	}
+
+	index := fmt.Sprintf("logstash-accesslog-%s.*", time.Now().Format("2006.01.02"))
+	data, err := instance.Search(
+		instance.Search.WithContext(ctx),
+		instance.Search.WithIndex(index),
+		instance.Search.WithBody(buf),
+		instance.Search.WithPretty(),
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "查询ES失败")
+	}
+	defer data.Body.Close()
+
+	if data.IsError() {
+		return nil, decodeErrorResponse(data.Body, data.Status())
+	}
+
+	return decodeSuccessResponse(data.Body)
+}
+
+// decodeErrorResponse 解析错误响应
+func decodeErrorResponse(body io.ReadCloser, status string) error {
+	var e map[string]interface{}
+	if err := json.NewDecoder(body).Decode(&e); err != nil {
+		return errors.Wrap(err, "解析错误响应失败")
+	}
+	return errors.New(fmt.Sprintf("[%s] %s: %s", status, e["error"].(map[string]interface{})["type"], e["error"].(map[string]interface{})["reason"]))
+}
+
+// decodeSuccessResponse 处理成功响应
+func decodeSuccessResponse(body io.ReadCloser) (map[string]any, error) {
+	var r map[string]interface{}
+	if err := json.NewDecoder(body).Decode(&r); err != nil {
+		return nil, errors.Wrap(err, "解析响应失败")
+	}
+
+	aggregations, ok := r["aggregations"].(map[string]any)
+	if !ok {
+		return nil, ErrBucketsIsEmpty
+	}
+
+	buckets := aggregations["statics"].(map[string]any)["buckets"].([]any)
+	if len(buckets) == 0 {
+		return nil, ErrBucketsIsEmpty
+	}
+
+	statics := make(map[string]any, len(buckets))
+	for _, bucket := range buckets {
+		key := bucket.(map[string]any)["key"].(string)
+		statics[key] = bucket
+	}
+
+	return statics, nil
 }
 
 // Delete 删除短链接
@@ -292,10 +418,62 @@ func (h *shortLinkHandler) Delete(c *gin.Context) {
 	serialize.NewResponse(200).ToJSON(c)
 }
 
+// Update 更新短链接
+// API 链接: https://app.apifox.com/link/project/4131066/apis/api-153792353
+// TAPD 需求链接: 【短链接修改】https://www.tapd.cn/52430403/prong/stories/view/1152430403001000021
 func (h *shortLinkHandler) Update(c *gin.Context) {
+	// 参数解析
 	form := new(types.UpdateShortLinkRequest)
-	fmt.Println(form)
-	//todo 更新短链接
+	if err := c.ShouldBind(form); err != nil {
+		serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	validTime, err := time.Parse("2006-01-02 15:04:05", form.ValidDate)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	ctx := middleware.WrapCtx(c)
+	// 0. 获取对应短链接的基本信息
+	info, err := h.iDao.GeRedirectByURI(ctx, form.Uri)
+	if err != nil {
+		// 尝试从此处进行攻击，对此进行防御
+		if errors.Is(err, model.ErrRecordNotFound) {
+			serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithErr(err)).ToJSON(c)
+			return
+		}
+		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	// 构建更新后的短链接
+	sl := &model.ShortLink{
+		OriginUrl:     form.OriginUrl,
+		Gid:           info.Gid,
+		Uri:           form.Uri,
+		Description:   form.Description,
+		ValidDateType: form.ValidDateType,
+		ValidTime:     validTime,
+	}
+	// 1. 校验短链接 gid 是否变更
+	// 短链接未发生改变
+	if strings.Compare(info.Gid, form.Gid) == 0 {
+		// 更新短链接
+		err = h.iDao.Update(ctx, sl)
+		if err != nil {
+			serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+			return
+		}
+		serialize.NewResponse(200, serialize.WithData(sl)).ToJSON(c)
+		return
+	}
+	// 短链接发生改变
+	err = h.iDao.UpdateWithMove(ctx, sl, form.Gid)
+	if err != nil {
+		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+		return
+	}
+	serialize.NewResponse(200, serialize.WithData(sl)).ToJSON(c)
+	return
 }
 
 // makeFullShortURL 生成完整的短链接

@@ -3,8 +3,7 @@ package rabbitmq
 import (
 	"SnapLink/internal/config"
 	logger2 "SnapLink/internal/logger"
-	"fmt"
-	"github.com/ThreeDotsLabs/watermill-amqp/pkg/amqp"
+	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/pkg/errors"
 	"github.com/zhufuyi/sponge/pkg/logger"
 	"net/url"
@@ -28,8 +27,9 @@ func defaultMQ() *MQ {
 			Host:   conf.Addr,
 			Path:   conf.VirtualHost,
 		}
-		fmt.Println(u.String())
 		rabbitmq.mq, err = NewMQ(u.String(), new(logger2.WatermillAdapter))
+		// 需要手动确认消息,保证消息不丢失
+		rabbitmq.mq.conf.Consume.NoWait = false
 		if err != nil {
 			// mq 初始化失败是十分严重的错误，所以这里使用了panic
 			logger.Panic(errors.Wrap(err, "init rabbitmq...failed").Error())
@@ -39,11 +39,11 @@ func defaultMQ() *MQ {
 }
 
 // NewPublisher 创建发布者
-func NewPublisher() (*amqp.Publisher, error) {
+func NewPublisher() (message.Publisher, error) {
 	return defaultMQ().NewPublisher()
 }
 
 // NewSubscriber 创建订阅者
-func NewSubscriber() (*amqp.Subscriber, error) {
+func NewSubscriber() (message.Subscriber, error) {
 	return defaultMQ().NewSubscriber()
 }

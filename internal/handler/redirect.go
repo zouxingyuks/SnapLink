@@ -5,19 +5,12 @@ import (
 	"SnapLink/internal/dao"
 	"SnapLink/internal/model"
 	"SnapLink/pkg/serialize"
-	"context"
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 )
 
-// RedirectsDao defining the dao interface
-type RedirectsDao interface {
-	GetByURI(ctx context.Context, uri string) (*model.Redirect, error)
-	CleanUp(ctx context.Context)
-}
-
 type RedirectHandler struct {
-	iDao RedirectsDao
+	iDao dao.RedirectsDao
 }
 
 func NewRedirectHandler() *RedirectHandler {

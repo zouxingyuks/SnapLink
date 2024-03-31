@@ -89,7 +89,7 @@ func (d *shortLinkGroupsDao) GetAllByCUser(ctx context.Context, cUser string) ([
 func (d *shortLinkGroupsDao) GetAll(ctx context.Context) (result []*model.ShortLinkGroup, err error) {
 	for i := 0; i < model.SLGroupShardingNum; i++ {
 		var records []*model.ShortLinkGroup
-		tableName := fmt.Sprintf("short_link_group_%d", i)
+		tableName := fmt.Sprintf("t_link_group%d", i)
 		err = d.db.Table(tableName).WithContext(ctx).Find(&records).Error
 		if err != nil {
 			return nil, err

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="RemoteTargetsManager">
+    <targets>
+      <target name="local" type="ssh/sftp" uuid="6362803f-d873-498d-9109-bd871b9e87eb">
+        <config>
+          <option name="projectRootOnTarget" value="/root/SnapLink" />
+          <option name="serverName" value="local" />
+        </config>
+        <ContributedStateBase type="GoLanguageRuntime">
+          <config>
+            <option name="goPath" value="/root/.gvm/pkgsets/go1.21.0/global" />
+            <option name="goRoot" value="/root/.gvm/gos/go1.21.0/bin/go" />
+          </config>
+        </ContributedStateBase>
+      </target>
+      <target name="aly" type="ssh/sftp" uuid="a6e6688e-1bd9-44cf-827b-f04ea0385cd5">
+        <config>
+          <option name="projectRootOnTarget" value="/home/items/SnapLink" />
+          <option name="serverName" value="aly" />
+        </config>
+        <ContributedStateBase type="GoLanguageRuntime">
+          <config />
+        </ContributedStateBase>
+      </target>
+    </targets>
+  </component>
+</project>

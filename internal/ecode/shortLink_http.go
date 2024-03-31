@@ -11,14 +11,8 @@ var (
 	shortLinkName     = "shortLink"
 	shortLinkBaseCode = errcode.HCode(shortLinkNO)
 
-	ErrCreateShortLink         = errcode.NewError(shortLinkBaseCode+1, "failed to create "+shortLinkName)
-	ErrDeleteByIDShortLink     = errcode.NewError(shortLinkBaseCode+2, "failed to delete "+shortLinkName)
-	ErrDeleteByIDsShortLink    = errcode.NewError(shortLinkBaseCode+3, "failed to delete by batch ids "+shortLinkName)
-	ErrUpdateByIDShortLink     = errcode.NewError(shortLinkBaseCode+4, "failed to update "+shortLinkName)
-	ErrGetByIDShortLink        = errcode.NewError(shortLinkBaseCode+5, "failed to get "+shortLinkName+" details")
-	ErrGetByConditionShortLink = errcode.NewError(shortLinkBaseCode+6, "failed to get "+shortLinkName+" details by conditions")
-	ErrListByIDsShortLink      = errcode.NewError(shortLinkBaseCode+7, "failed to list by batch ids "+shortLinkName)
-	ErrListByLastIDShortLink   = errcode.NewError(shortLinkBaseCode+8, "failed to list by last id "+shortLinkName)
-	ErrListShortLink           = errcode.NewError(shortLinkBaseCode+9, "failed to list of "+shortLinkName)
-	// error codes are globally unique, adding 1 to the previous error code
+	ErrUpdateByIDShortLink   = errcode.NewError(shortLinkBaseCode+4, "failed to update "+shortLinkName)
+	ErrGetByIDShortLink      = errcode.NewError(shortLinkBaseCode+5, "failed to get "+shortLinkName+" details")
+	ErrListByLastIDShortLink = errcode.NewError(shortLinkBaseCode+8, "failed to list by last id "+shortLinkName)
+	ErrListShortLink         = errcode.NewError(shortLinkBaseCode+9, "failed to list of "+shortLinkName)
 )

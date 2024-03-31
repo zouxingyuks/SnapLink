@@ -51,7 +51,7 @@ func NewShortLinkGroupHandler() ShortLinkGroupHandler {
 // @Param description body string false "描述"
 // @Success 200 {object} types.CreateShortLinkGroupRespond{}
 // @Failure 400 string "{"msg": "参数错误"}"
-// @RedirectInfo /api/v1/slink/group [post]
+// @Redirect /api/v1/slink/group [post]
 func (h *shortLinkGroupsHandler) Create(c *gin.Context) {
 	param := new(types.CreateShortLinkGroupRequest)
 
@@ -86,7 +86,7 @@ func (h *shortLinkGroupsHandler) Create(c *gin.Context) {
 // @param Authorization header string true "token"
 // @Success 200 {object} types.ListShortLinkGroupRespond{}
 // @Failure 400 string "{"msg": "参数错误"}"
-// @RedirectInfo /api/v1/slink/group/list [get]
+// @Redirect /api/v1/slink/group/list [get]
 func (h *shortLinkGroupsHandler) List(c *gin.Context) {
 	//1. 参数解析
 	claims, _ := jwt.ParseToken(c.GetHeader("Authorization")[7:])
@@ -114,7 +114,7 @@ func (h *shortLinkGroupsHandler) List(c *gin.Context) {
 // @Failure 400 string "{"msg": "参数错误"}"
 // @Failure 404 string "{"msg": "未找到该记录"}"
 // @Failure 500 string "{"msg": "更新失败"}"
-// @RedirectInfo /api/v1/slink/group [put]
+// @Redirect /api/v1/slink/group [put]
 func (h *shortLinkGroupsHandler) UpdateByGID(c *gin.Context) {
 	form := new(types.UpdateShortLinkGroupByGIDRequest)
 

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"SnapLink/internal/bloomFilter"
 	"SnapLink/internal/cache"
 	"SnapLink/internal/dao"
 	"SnapLink/internal/ecode"
@@ -169,14 +170,14 @@ func (h *UsersHandler) Register(c *gin.Context) {
 
 		if dao.DuplicateEntry.Is(err) {
 			serialize.NewResponseWithErrCode(ecode.UserNameExistError, serialize.WithErr(err)).ToJSON(c)
-			cache.BFAdd(ctx, "username", u.Username)
+			bloomFilter.BFAdd(ctx, "username", u.Username)
 			return
 		}
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
 		return
 	}
 	//7. 加入布隆过滤器
-	err = cache.BFAdd(ctx, "username", u.Username)
+	err = bloomFilter.BFAdd(ctx, "username", u.Username)
 	if err != nil {
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
 		return

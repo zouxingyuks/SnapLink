@@ -14,14 +14,18 @@ func NewBloomFilter(client *redis.Client) *BloomFilter {
 }
 
 // ADD 添加元素
-// num 返回添加的元素个数,如果元素已经存在则返回0
 // err 错误信息
-func (b *BloomFilter) ADD(ctx context.Context, key string, value string) (num int64, err error) {
+func (b *BloomFilter) ADD(ctx context.Context, key string, value string) (err error) {
 	count, err := b.client.Do(ctx, "BF.ADD", key, value).Result()
 	if err != nil {
-		return 0, err
+		return err
 	}
-	return count.(int64), nil
+	//如果元素已经存在，则返回错误
+	if count.(int64) == 0 {
+		return ErrElementExists
+
+	}
+	return nil
 }
 
 // MADD 添加多个元素
@@ -65,6 +69,23 @@ func (b *BloomFilter) MEXIST(ctx context.Context, key string, values ...string) 
 		results = append(results, counts.([]interface{})[i].(int64))
 	}
 	return results, err
+}
+
+// EXISTOrADD 判断元素是否存在，如果不存在则添加
+// exist 返回元素是否存在
+// err 错误信息
+func (b *BloomFilter) EXISTOrADD(ctx context.Context, key string, value string) (exist bool, err error) {
+	exist, err = b.EXIST(ctx, key, value)
+	//如果不存在,且此错误非预定义的错误，则返回错误
+	if err != nil {
+		return false, err
+	}
+	if !exist {
+		err = b.ADD(ctx, key, value)
+		return false, err
+	}
+	return true, nil
+
 }
 
 // RESERVE 创建一个布隆过滤器

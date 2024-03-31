@@ -1,6 +1,7 @@
 package dao
 
 import (
+	"SnapLink/internal/bloomFilter"
 	"SnapLink/internal/cache"
 	"SnapLink/internal/model"
 	"context"
@@ -10,22 +11,19 @@ import (
 	"github.com/zhufuyi/sponge/pkg/ggorm/query"
 	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
-	"time"
 )
 
 var _ TUserDao = (*tUserDao)(nil)
 
 // TUserDao defining the dao interface
 type TUserDao interface {
+	GetDB() *gorm.DB
 	Create(ctx context.Context, table *model.TUser) error
 	Update(ctx context.Context, table *model.TUser) error
-	DeleteByID(ctx context.Context, id uint64) error
-	DeleteByIDs(ctx context.Context, ids []uint64) error
 	GetByUsername(ctx context.Context, username string) (*model.TUser, error)
 	GetByCondition(ctx context.Context, condition *query.Conditions) (*model.TUser, error)
 	GetByConditionWithUsername(ctx context.Context, condition *query.Conditions, username string) (*model.TUser, error)
 	GetByColumns(ctx context.Context, params *query.Params) ([]*model.TUser, int64, error)
-	CreateByTx(ctx context.Context, tx *gorm.DB, table *model.TUser) (uint64, error)
 	HasUsername(ctx context.Context, username string) (bool, error)
 	GetAllUserName(ctx context.Context) ([]string, error)
 }
@@ -48,53 +46,22 @@ func NewTUserDao(db *gorm.DB, xCache cache.TUserCache) TUserDao {
 	}
 }
 
-func (d *tUserDao) deleteCache(ctx context.Context, id uint64) error {
-	if d.cache != nil {
-		return d.cache.Del(ctx, id)
-	}
-	return nil
+func (d *tUserDao) GetDB() *gorm.DB {
+	return d.db
 }
 
-// Create 创建用户记录,并且删除缓存
+// Create 创建用户记录
 func (d *tUserDao) Create(ctx context.Context, u *model.TUser) error {
 	err := d.db.Table(u.TName()).WithContext(ctx).Create(u).Error
-	_ = d.deleteCache(ctx, u.ID)
 	return err
-}
-
-// DeleteByID delete a record by id
-func (d *tUserDao) DeleteByID(ctx context.Context, id uint64) error {
-	err := d.db.WithContext(ctx).Where("id = ?", id).Delete(&model.TUser{}).Error
-	if err != nil {
-		return err
-	}
-
-	// delete cache
-	_ = d.deleteCache(ctx, id)
-
-	return nil
-}
-
-// DeleteByIDs delete records by batch id
-func (d *tUserDao) DeleteByIDs(ctx context.Context, ids []uint64) error {
-	err := d.db.WithContext(ctx).Where("id IN (?)", ids).Delete(&model.TUser{}).Error
-	if err != nil {
-		return err
-	}
-
-	// delete cache
-	for _, id := range ids {
-		_ = d.deleteCache(ctx, id)
-	}
-
-	return nil
 }
 
 // Update 根据用户名更新用户信息
 func (d *tUserDao) Update(ctx context.Context, table *model.TUser) error {
 	err := d.updateData(ctx, d.db, table)
-	// delete cache
-	_ = d.deleteCache(ctx, table.ID)
+	// delete slCache
+	// todo 解耦为异步删除
+	//_ = d.deleteCache(ctx, table.ID)
 	return err
 }
 
@@ -115,7 +82,6 @@ func (d *tUserDao) updateData(ctx context.Context, db *gorm.DB, table *model.TUs
 	if table.Mail != "" {
 		update["mail"] = table.Mail
 	}
-	update["update_time"] = time.Now()
 	return db.Table(table.TName()).WithContext(ctx).Where("username = ?", table.Username).Updates(update).Error
 }
 
@@ -149,7 +115,7 @@ func (d *tUserDao) GetByCondition(ctx context.Context, c *query.Conditions) (*mo
 	}
 	table := &model.TUser{}
 	for i := 0; i < model.TUserShardingNum; i++ {
-		err = d.db.WithContext(ctx).Table(fmt.Sprintf("t_user_%d", i)).Where(queryStr, args...).First(table).Error
+		err = d.db.WithContext(ctx).Table(fmt.Sprintf("%s%d", model.TUserPrefix, i)).Where(queryStr, args...).First(table).Error
 		if err == nil {
 			return table, nil
 		}
@@ -261,17 +227,11 @@ func (d *tUserDao) GetByUsername(ctx context.Context, username string) (*model.T
 	return &user, nil
 }
 
-// CreateByTx create a record in the database using the provided transaction
-func (d *tUserDao) CreateByTx(ctx context.Context, tx *gorm.DB, table *model.TUser) (uint64, error) {
-	err := tx.WithContext(ctx).Create(table).Error
-	return table.ID, err
-}
-
 // HasUsername 查询用户名是否存在
 func (d *tUserDao) HasUsername(ctx context.Context, username string) (bool, error) {
 
 	//1. 在布隆过滤器中查询
-	result, err := cache.BFExists(ctx, "username", username)
+	result, err := bloomFilter.BFExists(ctx, "username", username)
 	if err != nil {
 		return true, err
 	}
@@ -299,7 +259,7 @@ func (d *tUserDao) GetAllUserName(ctx context.Context) ([]string, error) {
 	usernames := make([]string, 0)
 	for i := 0; i < model.TUserShardingNum; i++ {
 		tUsernames := make([]string, 0)
-		err := d.db.WithContext(ctx).Table(fmt.Sprintf("t_user_%d", i)).Model(&model.TUser{}).Pluck("username", &tUsernames).Error
+		err := d.db.WithContext(ctx).Table(fmt.Sprintf("%s%d", model.TUserPrefix, i)).Model(&model.TUser{}).Pluck("username", &tUsernames).Error
 		if err != nil {
 			return nil, err
 		}

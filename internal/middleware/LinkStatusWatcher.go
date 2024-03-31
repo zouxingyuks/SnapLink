@@ -38,7 +38,7 @@ func Watcher() gin.HandlerFunc {
 
 				c.SetCookie("uid", uid, 3600, "/", "", false, false)
 			}
-			err = publisher.Publish("AccessLog", rabbitmq.NewAccessLogMessage(*info, header, ip, uid, time.Now().String()))
+			err = publisher.Publish("AccessLog", rabbitmq.NewAccessLogMessage(*info, header, c.GetString("request_id"), ip, uid, time.Now().Format("2006-01-02 15:04:05")))
 			if err != nil {
 				logger.Err(err)
 			}

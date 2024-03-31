@@ -34,12 +34,16 @@ func RegisterServers() []app.IServer {
 	servers = append(servers, httpServer)
 
 	// creating watcherService
-	watcherService := service.NewWatcherService()
-	servers = append(servers, watcherService)
+	//watcherService := service.NewWatcherService()
+	//servers = append(servers, watcherService)
 
 	// creating sentinelService
 	sentinelService := service.NewSentinelService()
 	servers = append(servers, sentinelService)
+
+	// creating canalService
+	//canalService := service.NewCanalService()
+	//servers = append(servers, canalService)
 	return servers
 }
 
