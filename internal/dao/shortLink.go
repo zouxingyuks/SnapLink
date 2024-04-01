@@ -6,6 +6,7 @@ import (
 	"SnapLink/internal/model"
 	"context"
 	"fmt"
+	"github.com/go-redis/redis/v8"
 	"github.com/pkg/errors"
 	cacheBase "github.com/zhufuyi/sponge/pkg/cache"
 	"github.com/zhufuyi/sponge/pkg/logger"
@@ -36,13 +37,21 @@ type shortLinkDao struct {
 }
 
 // NewShortLinkDao 创建 shortLinkDao
-func NewShortLinkDao() ShortLinkDao {
-	return &shortLinkDao{
-		db:            model.GetDB(),
-		slCache:       cache.NewShortLinkCache(model.GetCacheType()),
-		redirectCache: cache.NewRedirectsCache(model.GetCacheType()),
-		sfg:           new(singleflight.Group),
+func NewShortLinkDao(db *gorm.DB, client *redis.Client) (ShortLinkDao, error) {
+	var err error
+	dao := &shortLinkDao{
+		db:  db,
+		sfg: new(singleflight.Group),
 	}
+	dao.slCache, err = cache.NewShortLinkCache(client)
+	if err != nil {
+		return nil, errors.Wrap(err, "NewShortLinkDao Failed")
+	}
+	dao.redirectCache, err = cache.NewRedirectsCache(client)
+	if err != nil {
+		return nil, errors.Wrap(err, "NewShortLinkDao Failed")
+	}
+	return dao, nil
 }
 
 // Create 创建一条短链接

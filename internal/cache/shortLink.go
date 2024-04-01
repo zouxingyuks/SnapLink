@@ -31,10 +31,11 @@ type shortLinkCache struct {
 }
 
 // NewShortLinkCache new a cache
-func NewShortLinkCache(cacheType *model.CacheType) ShortLinkCache {
-	return &shortLinkCache{
-		client: cacheType.Rdb,
+func NewShortLinkCache(client *redis.Client) (ShortLinkCache, error) {
+	cache := &shortLinkCache{
+		client: client,
 	}
+	return cache, nil
 }
 
 // SetCount 设置分组下的短链接数量

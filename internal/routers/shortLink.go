@@ -4,12 +4,18 @@ import (
 	"SnapLink/internal/handler"
 	middleware2 "SnapLink/internal/middleware"
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/zhufuyi/sponge/pkg/gin/middleware"
+	"github.com/zhufuyi/sponge/pkg/logger"
 )
 
 func init() {
 	apiV1RouterFns = append(apiV1RouterFns, func(group *gin.RouterGroup) {
-		shortLinkRouter(group, handler.NewShortLinkHandler())
+		h, err := handler.NewShortLinkHandler()
+		if err != nil {
+			logger.Panic(errors.Wrap(err, "init shortLinkHandler Failed").Error())
+		}
+		shortLinkRouter(group, h)
 	})
 }
 

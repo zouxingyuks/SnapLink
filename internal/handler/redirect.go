@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"SnapLink/internal/cache"
 	"SnapLink/internal/dao"
 	"SnapLink/internal/model"
 	"SnapLink/pkg/serialize"
@@ -13,13 +12,14 @@ type RedirectHandler struct {
 	iDao dao.RedirectsDao
 }
 
-func NewRedirectHandler() *RedirectHandler {
-	h := &RedirectHandler{
-		iDao: dao.NewRedirectsDao(
-			cache.NewRedirectsCache(model.GetCacheType()),
-		),
+func NewRedirectHandler() (*RedirectHandler, error) {
+	var err error
+	h := new(RedirectHandler)
+	h.iDao, err = dao.NewRedirectsDao(model.GetDB(), model.GetCacheType().Rdb)
+	if err != nil {
+		return nil, err
 	}
-	return h
+	return h, nil
 }
 
 // Redirect 访问短链接重定向到原始链接

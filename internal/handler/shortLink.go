@@ -44,15 +44,15 @@ type shortLinkHandler struct {
 }
 
 // NewShortLinkHandler creating the handler interface
-func NewShortLinkHandler() ShortLinkHandler {
-	h := &shortLinkHandler{
-		iDao: dao.NewShortLinkDao(),
-		//iDaoStat: dao.NewLinkAccessStatisticDao(
-		//	cache.NewLinkAccessStatisticCache(model.GetCacheType()),
-		//),
-	}
+func NewShortLinkHandler() (ShortLinkHandler, error) {
+	var err error
+	h := new(shortLinkHandler)
 	Domain = config.Get().App.Domain
-	return h
+	h.iDao, err = dao.NewShortLinkDao(model.GetDB(), model.GetCacheType().Rdb)
+	if err != nil {
+		return nil, err
+	}
+	return h, nil
 }
 
 // Create 创建短链接

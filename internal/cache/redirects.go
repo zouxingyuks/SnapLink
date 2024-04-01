@@ -1,13 +1,12 @@
 package cache
 
 import (
+	"SnapLink/internal/model"
 	"context"
 	"encoding/json"
-	"errors"
 	"github.com/go-redis/redis/v8"
+	"github.com/pkg/errors"
 	"time"
-
-	"SnapLink/internal/model"
 )
 
 const (
@@ -33,11 +32,17 @@ type redirectsCache struct {
 	client *redis.Client
 }
 
-// NewRedirectsCache new a cache
-func NewRedirectsCache(cacheType *model.CacheType) RedirectsCache {
-	return &redirectsCache{
-		client: cacheType.Rdb,
+// NewRedirectsCache 新建短链接的缓存
+func NewRedirectsCache(client *redis.Client) (RedirectsCache, error) {
+	var err error
+	cache := &redirectsCache{
+		client: client,
 	}
+
+	if err != nil {
+		return nil, err
+	}
+	return cache, nil
 }
 
 // GetRedirectsCacheKey cache key
@@ -52,6 +57,10 @@ func (c *redirectsCache) Set(ctx context.Context, uri string, redirect *model.Re
 	}
 	key := c.GetRedirectsCacheKey(uri)
 	jsonBytes, _ := json.Marshal(redirect)
+
+	// 设置本地缓存
+	_ = LocalCache().Set(key, jsonBytes, 1)
+	// 设置分布式缓存
 	err := c.client.Set(ctx, key, jsonBytes, duration).Err()
 	return err
 }
@@ -59,14 +68,31 @@ func (c *redirectsCache) Set(ctx context.Context, uri string, redirect *model.Re
 // Get 获取缓存
 func (c *redirectsCache) Get(ctx context.Context, uri string) (*model.Redirect, error) {
 	key := c.GetRedirectsCacheKey(uri)
-	jsonBytes, err := c.client.Get(ctx, key).Bytes()
-	if err != nil {
-		if errors.Is(err, redis.Nil) {
-			return nil, model.ErrCacheNotFound
-		}
-		return nil, err
-	}
 	redirect := new(model.Redirect)
+	var (
+		jsonBytes []byte
+		err       error
+		ok        bool
+	)
+
+	//从本地缓存查询
+	if data, exist := LocalCache().Get(key); exist {
+		jsonBytes, ok = (data).([]byte)
+	}
+	//如果本地缓存没查到
+	if !ok {
+		//从分布式缓存查询
+		jsonBytes, err = c.client.Get(ctx, key).Bytes()
+		if err != nil {
+			if errors.Is(err, redis.Nil) {
+				return nil, model.ErrCacheNotFound
+			}
+			return nil, err
+		}
+		//更新数据到本地缓存
+		_ = LocalCache().Set(key, jsonBytes, 1)
+	}
+
 	err = json.Unmarshal(jsonBytes, redirect)
 	if err != nil {
 		return nil, err

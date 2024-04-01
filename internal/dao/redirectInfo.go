@@ -5,6 +5,7 @@ import (
 	"SnapLink/internal/cache"
 	"SnapLink/internal/model"
 	"context"
+	"github.com/go-redis/redis/v8"
 	"github.com/pkg/errors"
 	cacheBase "github.com/zhufuyi/sponge/pkg/cache"
 	"github.com/zhufuyi/sponge/pkg/logger"
@@ -23,14 +24,18 @@ type redirectsDao struct {
 	sfg   *singleflight.Group
 }
 
-// NewRedirectsDao creating the dao interface
-func NewRedirectsDao(xCache cache.RedirectsCache) RedirectsDao {
+// NewRedirectsDao 创建数据层接口
+func NewRedirectsDao(db *gorm.DB, client *redis.Client) (RedirectsDao, error) {
+	var err error
 	d := &redirectsDao{
-		db:    model.GetDB(),
-		cache: xCache,
-		sfg:   new(singleflight.Group),
+		db:  db,
+		sfg: new(singleflight.Group),
 	}
-	return d
+	d.cache, err = cache.NewRedirectsCache(client)
+	if err != nil {
+		return nil, err
+	}
+	return d, nil
 }
 
 // GetByURI 根据 uri 获取对应的原始链接
