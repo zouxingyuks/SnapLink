@@ -3,6 +3,7 @@ package main
 import (
 	"SnapLink/internal/model"
 	"fmt"
+	"github.com/zhufuyi/sponge/pkg/logger"
 	"gorm.io/gorm"
 	"sync"
 )
@@ -10,102 +11,57 @@ import (
 type generateTables func(db *gorm.DB)
 
 var fns = []generateTables{
-	generateShortLink,
-	generateShortLinkGroup,
-	generateTUser,
-	generateRedirect,
-	generateLinkAccessRecord,
-	generateLinkAccessStatistic,
+	generateTableFunc(model.ShortLinkGroup{}, model.SLGroupPrefix, model.SLGroupShardingNum),
+	generateTableFunc(model.TUser{}, model.TUserPrefix, model.TUserShardingNum),
+	generateTableFunc(model.ShortLink{}, model.ShortLinkPrefix, model.ShortLinkShardingNum),
+	generateTableFunc(model.Redirect{}, model.RedirectPrefix, model.RedirectShardingNum),
+	//generateTableFunc(model.LinkAccessRecord{}, model.LinkAccessRecordPrefix, model.LinkAccessRecordShardingNum),
+	//generateTableFunc(model.LinkAccessStatistic{}, model.LinkAccessStatisticPrefix, model.LinkAccessStatisticShardingNum),
 }
 
 func daoInit() {
 	DB := model.GetDB()
-	// 自动迁移模式
 	DB.AutoMigrate(
-		model.Config{},
-		// 在此处填入需要迁移的数据类型
+	// 在此处填入需要迁移的数据类型
 	)
+
 	wg := new(sync.WaitGroup)
-	//有分表的话，需要在此处添加分表的迁移
 	for _, fn := range fns {
 		wg.Add(1)
-		go func(db *gorm.DB) {
+		go func(fn generateTables, db *gorm.DB) {
+			defer wg.Done()
 			fn(db)
-			wg.Done()
-		}(DB)
+		}(fn, DB)
 	}
 	wg.Wait()
-
 }
 
-func generateShortLinkGroup(db *gorm.DB) {
-	shortLinkGroup := model.ShortLinkGroup{}
-	for i := 0; i < model.SLGroupShardingNum; i++ {
-		tName := fmt.Sprintf("t_link_group%d", i)
-		// 先判断是否存在表，不存在则创建
-		if !db.Migrator().HasTable(tName) {
-			db.Table(tName).AutoMigrate(shortLinkGroup)
+func generateTableFunc(table interface{}, prefix string, shardingNum int) generateTables {
+	return func(db *gorm.DB) {
+		existTables := make(map[string]struct{}, shardingNum)
+		query := `SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_type = 'BASE TABLE' AND table_name LIKE ?`
+		rows, err := db.Raw(query, db.Migrator().CurrentDatabase(), prefix+"%").Rows()
+		if err != nil {
+			logger.Panic(err.Error())
+			return
 		}
-	}
-}
+		defer rows.Close()
 
-// 分表 TUser
-func generateTUser(db *gorm.DB) {
-	tUser := model.TUser{}
-	for i := 0; i < model.TUserShardingNum; i++ {
-		// 先判断是否存在表，不存在则创建
-		tName := fmt.Sprintf("%s%d", model.TUserPrefix, i)
-		if !db.Migrator().HasTable(tName) {
-			db.Table(tName).AutoMigrate(tUser)
+		for rows.Next() {
+			var tableName string
+			if err := rows.Scan(&tableName); err != nil {
+				logger.Panic(err.Error())
+				return
+			}
+			existTables[tableName] = struct{}{}
 		}
-	}
-
-}
-
-// 分表 shortLink
-func generateShortLink(db *gorm.DB) {
-	shortLink := model.ShortLink{}
-	for i := 0; i < model.ShortLinkShardingNum; i++ {
-		// 先判断是否存在表，不存在则创建
-		tName := fmt.Sprintf("%s%d", model.ShortLinkPrefix, i)
-		if !db.Migrator().HasTable(tName) {
-			db.Table(tName).AutoMigrate(shortLink)
-		}
-	}
-}
-
-// 分表 redirect
-func generateRedirect(db *gorm.DB) {
-	redirectInfo := model.Redirect{}
-	for i := 0; i < model.RedirectShardingNum; i++ {
-		// 先判断是否存在表，不存在则创建
-		tName := fmt.Sprintf("redirect_%d", i)
-		if !db.Migrator().HasTable(tName) {
-			db.Table(tName).AutoMigrate(redirectInfo)
-		}
-	}
-}
-
-// 分表 LinkAccessRecord
-func generateLinkAccessRecord(db *gorm.DB) {
-	linkAccessRecord := model.LinkAccessRecord{}
-	for i := 0; i < model.LinkAccessRecordShardingNum; i++ {
-		// 先判断是否存在表，不存在则创建
-		tName := fmt.Sprintf("link_access_record_%d", i)
-		if !db.Migrator().HasTable(tName) {
-			db.Table(tName).AutoMigrate(linkAccessRecord)
-		}
-	}
-}
-
-// 分表 LinkAccessStatistic
-func generateLinkAccessStatistic(db *gorm.DB) {
-	linkAccessStatistic := model.LinkAccessStatistic{}
-	for i := 0; i < model.LinkAccessStatisticShardingNum; i++ {
-		// 先判断是否存在表，不存在则创建
-		tName := fmt.Sprintf("link_access_statistic_%d", i)
-		if !db.Migrator().HasTable(tName) {
-			db.Table(tName).AutoMigrate(linkAccessStatistic)
+		for i := 0; i < shardingNum; i++ {
+			tableName := fmt.Sprintf("%s%d", prefix, i)
+			if _, ok := existTables[tableName]; !ok {
+				if err := db.Table(tableName).AutoMigrate(table); err != nil {
+					fmt.Printf("Failed to migrate table %s: %v\n", tableName, err)
+				}
+			}
 		}
 	}
 }
