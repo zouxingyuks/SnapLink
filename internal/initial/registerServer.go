@@ -41,9 +41,9 @@ func RegisterServers() []app.IServer {
 	sentinelService := service.NewSentinelService()
 	servers = append(servers, sentinelService)
 
-	// creating canalService
-	//canalService := service.NewCanalService()
-	//servers = append(servers, canalService)
+	// creating cacheAsideService
+	cacheAsideService := service.NewCacheASideService()
+	servers = append(servers, cacheAsideService)
 	return servers
 }
 
