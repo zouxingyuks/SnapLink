@@ -32,5 +32,5 @@ type LinkAccessRecord struct {
 // 因为查询记录的时候通常是查询某个链接的访问记录，所以这里的分表规则是根据URI进行分表
 func (l LinkAccessRecord) TName() string {
 	id := hash(l.URI)
-	return fmt.Sprintf("link_access_record_%d", id%LinkAccessRecordShardingNum)
+	return fmt.Sprintf("%s%d", LinkAccessRecordPrefix, id%LinkAccessRecordShardingNum)
 }

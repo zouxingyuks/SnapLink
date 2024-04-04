@@ -24,7 +24,7 @@ type LinkAccessStatistic struct {
 
 func (l LinkAccessStatistic) TName() string {
 	id := hash(l.URI)
-	return fmt.Sprintf("link_access_statistic_%d", id%LinkAccessStatisticShardingNum)
+	return fmt.Sprintf("%s%d", LinkAccessStatisticPrefix, id%LinkAccessStatisticShardingNum)
 }
 
 type LinkAccessStatisticDay struct {

@@ -15,6 +15,6 @@ type Redirect struct {
 
 func (r Redirect) TName() string {
 	id := hash(r.Uri)
-	return fmt.Sprintf("redirect_%d", id%RedirectShardingNum)
+	return fmt.Sprintf("%s%d", RedirectPrefix, id%RedirectShardingNum)
 
 }
