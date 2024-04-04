@@ -26,5 +26,5 @@ type ShortLink struct {
 // TName 对应的分表表名
 func (s ShortLink) TName() string {
 	id := hash(s.Gid)
-	return fmt.Sprintf("%s%d", ShortLinkPrefix, id%ShortLinkShardingNum)
+	return fmt.Sprintf("%s-%d", ShortLinkPrefix, id%ShortLinkShardingNum)
 }

@@ -20,5 +20,5 @@ type ShortLinkGroup struct {
 // TName 根据创建人进行分表
 func (s ShortLinkGroup) TName() string {
 	id := hash(s.CUsername)
-	return fmt.Sprintf("%s%d", SLGroupPrefix, id%SLGroupShardingNum)
+	return fmt.Sprintf("%s-%d", SLGroupPrefix, id%SLGroupShardingNum)
 }

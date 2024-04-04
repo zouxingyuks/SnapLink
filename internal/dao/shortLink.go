@@ -32,7 +32,7 @@ type ShortLinkDao interface {
 type shortLinkDao struct {
 	db            *gorm.DB
 	slCache       cache.ShortLinkCache
-	redirectCache cache.RedirectsCache
+	redirectCache cache.IRedirectsCache
 	sfg           *singleflight.Group
 }
 

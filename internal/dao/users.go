@@ -115,7 +115,7 @@ func (d *tUserDao) GetByCondition(ctx context.Context, c *query.Conditions) (*mo
 	}
 	table := &model.TUser{}
 	for i := 0; i < model.TUserShardingNum; i++ {
-		err = d.db.WithContext(ctx).Table(fmt.Sprintf("%s%d", model.TUserPrefix, i)).Where(queryStr, args...).First(table).Error
+		err = d.db.WithContext(ctx).Table(fmt.Sprintf("%s-%d", model.TUserPrefix, i)).Where(queryStr, args...).First(table).Error
 		if err == nil {
 			return table, nil
 		}
@@ -259,7 +259,7 @@ func (d *tUserDao) GetAllUserName(ctx context.Context) ([]string, error) {
 	usernames := make([]string, 0)
 	for i := 0; i < model.TUserShardingNum; i++ {
 		tUsernames := make([]string, 0)
-		err := d.db.WithContext(ctx).Table(fmt.Sprintf("%s%d", model.TUserPrefix, i)).Model(&model.TUser{}).Pluck("username", &tUsernames).Error
+		err := d.db.WithContext(ctx).Table(fmt.Sprintf("%s-%d", model.TUserPrefix, i)).Model(&model.TUser{}).Pluck("username", &tUsernames).Error
 		if err != nil {
 			return nil, err
 		}

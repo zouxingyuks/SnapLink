@@ -56,7 +56,7 @@ func generateTableFunc(table interface{}, prefix string, shardingNum int) genera
 			existTables[tableName] = struct{}{}
 		}
 		for i := 0; i < shardingNum; i++ {
-			tableName := fmt.Sprintf("%s%d", prefix, i)
+			tableName := fmt.Sprintf("%s-%d", prefix, i)
 			if _, ok := existTables[tableName]; !ok {
 				if err := db.Table(tableName).AutoMigrate(table); err != nil {
 					fmt.Printf("Failed to migrate table %s: %v\n", tableName, err)

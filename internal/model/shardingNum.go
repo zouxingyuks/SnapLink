@@ -17,15 +17,15 @@ const (
 
 const (
 	//TUserPrefix TUser表前缀
-	TUserPrefix = "t_user_"
+	TUserPrefix = "t_user"
 	//SLGroupPrefix SLGroup表前缀
-	SLGroupPrefix = "sl_group_"
+	SLGroupPrefix = "sl_group"
 	//ShortLinkPrefix ShortLink表前缀
-	ShortLinkPrefix = "short_link_"
+	ShortLinkPrefix = "short_link"
 	//RedirectPrefix Redirect表前缀
-	RedirectPrefix = "redirect_"
+	RedirectPrefix = "redirect"
 	//LinkAccessRecordPrefix LinkAccessRecord表前缀
-	LinkAccessRecordPrefix = "link_access_record_"
+	LinkAccessRecordPrefix = "link_access_record"
 	//LinkAccessStatisticPrefix LinkAccessStatistic表前缀
-	LinkAccessStatisticPrefix = "link_access_statistic_"
+	LinkAccessStatisticPrefix = "link_access_statistic"
 )

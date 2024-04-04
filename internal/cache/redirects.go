@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"github.com/go-redis/redis/v8"
 	"github.com/pkg/errors"
+	"github.com/zhufuyi/sponge/pkg/logger"
+	"sync"
 	"time"
 )
 
@@ -18,10 +20,27 @@ const (
 	RedirectsNeverExpireTime = 0
 )
 
-// RedirectsCache slCache interface
-type RedirectsCache interface {
+var redirectInstance struct {
+	IRedirectsCache
+	sync.Once
+}
+
+func Redirect() IRedirectsCache {
+	redirectInstance.Do(func() {
+		var err error
+		if redirectInstance.IRedirectsCache, err = NewRedirectsCache(model.GetCacheType().Rdb); err != nil {
+			logger.Panic("Init cache.Redirect() failed")
+			return
+		}
+	})
+	return redirectInstance.IRedirectsCache
+}
+
+// IRedirectsCache slCache interface
+type IRedirectsCache interface {
 	Set(ctx context.Context, uri string, info *model.Redirect, duration time.Duration) error
 	Get(ctx context.Context, uri string) (*model.Redirect, error)
+	Del(ctx context.Context, uri string) error
 	SetCacheWithNotFound(ctx context.Context, uri string) error
 }
 
@@ -33,7 +52,7 @@ type redirectsCache struct {
 }
 
 // NewRedirectsCache 新建短链接的缓存
-func NewRedirectsCache(client *redis.Client) (RedirectsCache, error) {
+func NewRedirectsCache(client *redis.Client) (IRedirectsCache, error) {
 	var err error
 	cache := &redirectsCache{
 		client: client,
@@ -98,6 +117,15 @@ func (c *redirectsCache) Get(ctx context.Context, uri string) (*model.Redirect, 
 		return nil, err
 	}
 	return redirect, nil
+}
+
+// Del 删除缓存
+func (c *redirectsCache) Del(ctx context.Context, uri string) error {
+	key := c.GetRedirectsCacheKey(uri)
+	//删除本地缓存
+	LocalCache().Del(key)
+	err := c.client.Del(ctx, key).Err()
+	return err
 }
 
 // SetCacheWithNotFound 设置不存在的缓存，以防止缓存穿透，默认过期时间 10 分钟

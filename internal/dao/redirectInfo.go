@@ -20,7 +20,7 @@ type RedirectsDao interface {
 }
 type redirectsDao struct {
 	db    *gorm.DB
-	cache cache.RedirectsCache
+	cache cache.IRedirectsCache
 	sfg   *singleflight.Group
 }
 
