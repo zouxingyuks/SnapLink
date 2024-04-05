@@ -3,21 +3,22 @@ services:
   rabbitmq:
     image: rabbitmq:latest
     container_name: snaplink-rabbitmq
+    hostname: snaplink-rabbitmq
     ports:
       - "5672:5672"
       - "15672:15672"
     restart: always
-    hostname: snaplink-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: password.123
     volumes:
-      - "/home/anubis/docker_data/snaplink/rabbitmq:/var/lib/rabbitmq"
+      - "./docker_data/rabbitmq:/var/lib/rabbitmq"
     networks:
       - snaplink_net
   mysql:
-    image: mysql:latest
+    image: mysql:8.0.17
     container_name: snaplink-mysql
+    hostname: snaplink-mysql
     ports:
       - "3306:3306"
     environment:
@@ -26,38 +27,85 @@ services:
       MYSQL_USER: saas     # 创建名为 saas 的用户
       MYSQL_PASSWORD: "vAm>~,A*Cdo9j#6@^*k3"  # 设置密码，这里替换成你想要的密码
     volumes:
-      - "/home/anubis/docker_data/snaplink/mysql/conf:/etc/mysql/mysql.conf.d"
-      - "/home/anubis/docker_data/snaplink/mysql/log:/var/log/mysql"
-      - "/home/anubis/docker_data/snaplink/mysql/data:/var/lib/mysql"
+      - "./docker_data/mysql/my.cnf:/etc/my.cnf"
+      - "./docker_data/mysql/log:/var/log/mysql"
+      - "./docker_data/mysql/data:/var/lib/mysql"
     networks:
       - snaplink_net
-  nacos:
-    image: nacos/nacos-server:v2.1.1
-    container_name: snaplink-nacos
-    environment:
-      MODE: standalone
-      TIME_ZONE: Asia/Shanghai
-    ports:
-      - "8848:8848"
-      - "9848:9848"
-
   redis:
     image: redis/redis-stack-server
     container_name: snaplink-redis
+    hostname: snaplink-redis
     ports:
       - "6379:6379"
       - "8001:8001"
   maxwell:
     container_name: snaplink-maxwell
+    hostname: snaplink-maxwell
     image: zendesk/maxwell
     command: bin/maxwell --config /etc/maxwell/config.properties
     volumes:
-      - "/home/anubis/docker_data/snaplink/maxwell:/etc/maxwell/"
+      - "./docker_data/maxwell:/etc/maxwell"
+    networks:
+      - snaplink_net
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.7.0
+    container_name: snaplink-elasticsearch
+    hostname: snaplink-elasticsearch
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - node.name=elasticsearch
+      - ES_JAVA_OPTS=-Xms1024m -Xmx1024m
+      - ELASTIC_PASSWORD=StJffdEsZC
+      - ELASTIC_CONTAINER=true
+      - KIBANA_SYSTEM_PASSWORD=StJffdEsZC
+      - LOGSTASH_INTERNAL_PASSWORD=StJffdEsZC
+      - METRICBEAT_INTERNAL_PASSWORD=
+      - FILEBEAT_INTERNAL_PASSWORD=
+      - HEARTBEAT_INTERNAL_PASSWORD=
+      - MONITORING_INTERNAL_PASSWORD=
+      - BEATS_SYSTEM_PASSWORD=
+    volumes:
+      - "./docker_data/elk/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml"
+      - "./docker_data/elk/elasticsearch/data:/usr/share/elasticsearch/data"
+    networks:
+      - snaplink_net
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.7.0
+    container_name: snaplink-logstash
+    hostname: snaplink-logstash
+    ports:
+      - "5000:5000"
+    environment:
+      - LOGSTASH_INTERNAL_PASSWORD=StJffdEsZC
+      - LS_JAVA_OPTS=-Xms1024m -Xmx1024m
+      - ELASTIC_CONTAINER=true
+      - LANG=en_US.UTF-8
+      - LC_ALL=en_US.UTF-8
+    depends_on:
+      - kibana
+    volumes:
+      - "./docker_data/elk/logstash.yml:/usr/share/logstash/config/logstash.yml"
+      - "./docker_data/elk/logstash/pipeline:/usr/share/logstash/pipeline"
+    networks:
+      - snaplink_net
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.7.0
+    container_name: snaplink-kibana
+    hostname: snaplink-kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - KIBANA_SYSTEM_PASSWORD=StJffdEsZC
+      - ELASTIC_CONTAINER=true
+    volumes:
+      - "./docker_data/elk/kibana.yml:/usr/share/kibana/config/kibana.yml"
+    depends_on:
+      - elasticsearch
     networks:
       - snaplink_net
 networks:
   snaplink_net:
     driver: bridge
-volumes:
-  rocketmq_data:
-    driver: local
