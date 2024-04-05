@@ -79,7 +79,7 @@ func makeUsernameBF(db *gorm.DB) (bool, []error) {
 		errs := make([]error, 0, model.TUserShardingNum)
 		wg := sync.WaitGroup{}
 		for i := 0; i < model.TUserShardingNum; i++ {
-			tableName := fmt.Sprintf("t_user_%d", i)
+			tableName := fmt.Sprintf("%s-%d", model.TUserPrefix, i)
 			wg.Add(1)
 			go func(id int, tName string) {
 				defer func() {
@@ -138,7 +138,7 @@ func makeUriBF(db *gorm.DB) (bool, []error) {
 		wg := sync.WaitGroup{}
 		for i := 0; i < model.RedirectShardingNum; i++ {
 			errs = append(errs, nil)
-			tableName := fmt.Sprintf("redirect_%d", i)
+			tableName := fmt.Sprintf("%s-%d", model.RedirectPrefix, i)
 			wg.Add(1)
 			go func(id int, tName string) {
 				defer func() {
