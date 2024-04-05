@@ -5,7 +5,6 @@ import (
 	"SnapLink/internal/cache"
 	"SnapLink/internal/model"
 	"context"
-	"fmt"
 	"github.com/go-redis/redis/v8"
 	"github.com/pkg/errors"
 	cacheBase "github.com/zhufuyi/sponge/pkg/cache"
@@ -108,8 +107,22 @@ func (d *shortLinkDao) CreateBatch(ctx context.Context, tables []*model.ShortLin
 func (d *shortLinkDao) List(ctx context.Context, gid string, page, pageSize int) ([]*model.ShortLink, error) {
 	var list []*model.ShortLink
 	tableName := (&model.ShortLink{Gid: gid}).TName()
-	sql := fmt.Sprintf("SELECT * FROM %s WHERE gid =? AND id >= (SELECT id FROM %s WHERE gid = ? LIMIT 1 OFFSET ?) ORDER BY id LIMIT ?", tableName, tableName)
-	err := d.db.WithContext(ctx).Table(tableName).Raw(sql, gid, gid, (page-1)*pageSize, pageSize).Find(&list).Error
+	//sql := fmt.Sprintf("SELECT * FROM %s WHERE gid =? AND id >= (SELECT id FROM %s WHERE gid = ? LIMIT 1 OFFSET ?) ORDER BY id LIMIT ?", tableName, tableName)
+	//err := d.db.WithContext(ctx).Table(tableName).Raw(sql, gid, gid, (page-1)*pageSize, pageSize).Find(&list).Error
+	// 构建子查询
+	subQuery := d.db.WithContext(ctx).
+		Select("id").
+		Table(tableName).
+		Where("gid = ?", gid).
+		Limit(1).
+		Offset((page - 1) * pageSize)
+	// 主查询
+	err := d.db.WithContext(ctx).
+		Table(tableName).
+		Where("gid = ?", gid).
+		Where("id >= (?)", subQuery).
+		Limit(pageSize).
+		Find(&list).Error
 	return list, err
 }
 

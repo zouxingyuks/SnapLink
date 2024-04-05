@@ -4,6 +4,8 @@ import (
 	"SnapLink/internal/model"
 	"encoding/json"
 	"github.com/go-redis/redis/v8"
+	"github.com/zhufuyi/sponge/pkg/logger"
+	"sync"
 	"time"
 )
 
@@ -19,10 +21,24 @@ const (
 	shortLinkGroupCacheEmpty = "empty"
 )
 
-var _ ShortLinkGroupCache = (*shortLinkGroupsCache)(nil)
+var slGroupInstance struct {
+	IShortLinkGroupCache
+	sync.Once
+}
 
-// ShortLinkGroupCache cache interface
-type ShortLinkGroupCache interface {
+func SLGroup() IShortLinkGroupCache {
+	slGroupInstance.Do(func() {
+		var err error
+		if slGroupInstance.IShortLinkGroupCache, err = NewShortLinkGroupCache(model.GetCacheType().Rdb); err != nil {
+			logger.Panic("Init cache.Redirect() failed")
+			return
+		}
+	})
+	return slGroupInstance.IShortLinkGroupCache
+}
+
+// IShortLinkGroupCache cache interface
+type IShortLinkGroupCache interface {
 	ADD(ctx context.Context, username string, group *model.ShortLinkGroup) error
 	MADD(ctx context.Context, username string, groups []*model.ShortLinkGroup) error
 	SetEmpty(ctx context.Context, username string) error
@@ -36,10 +52,15 @@ type shortLinkGroupsCache struct {
 }
 
 // NewShortLinkGroupCache new a cache
-func NewShortLinkGroupCache(cacheType *model.CacheType) ShortLinkGroupCache {
-	return &shortLinkGroupsCache{
-		client: cacheType.Rdb,
+func NewShortLinkGroupCache(client *redis.Client) (IShortLinkGroupCache, error) {
+	var err error
+	cache := &shortLinkGroupsCache{
+		client: client,
 	}
+	if err != nil {
+		return nil, err
+	}
+	return cache, nil
 }
 
 // makeSLGroupKey 获取用户的 group 缓存 key

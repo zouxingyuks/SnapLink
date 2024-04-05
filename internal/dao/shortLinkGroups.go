@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"SnapLink/internal/cache"
@@ -27,12 +26,12 @@ type ShortLinkGroupDao interface {
 }
 type shortLinkGroupsDao struct {
 	db    *gorm.DB
-	cache cache.ShortLinkGroupCache
+	cache cache.IShortLinkGroupCache
 	sfg   *singleflight.Group
 }
 
 // NewShortLinkGroupDao creating the dao interface
-func NewShortLinkGroupDao(db *gorm.DB, xCache cache.ShortLinkGroupCache) ShortLinkGroupDao {
+func NewShortLinkGroupDao(db *gorm.DB, xCache cache.IShortLinkGroupCache) ShortLinkGroupDao {
 	return &shortLinkGroupsDao{
 		db:    db,
 		cache: xCache,
@@ -122,32 +121,31 @@ func (d *shortLinkGroupsDao) UpdateByGidAndUsername(ctx context.Context, gid str
 		return nil, err
 	}
 	d.db.Table(group.TName()).WithContext(ctx).Where("gid = ?", gid).First(group)
-	d.cache.Del(ctx, username)
 	return group, nil
 }
-
-// UpdateSortOrderByGidAndUsername 批量更新排序
-// todo 索引二次优化
 func (d *shortLinkGroupsDao) UpdateSortOrderByGidAndUsername(ctx context.Context, gids []string, sortOrders []int, username string) error {
 	lg := len(gids)
 	ls := len(sortOrders)
 	if lg != ls || lg == 0 {
 		return errors.New("gids and sortOrders length not equal or are zero")
 	}
-	// 开始构建CASE WHEN语句
-	var cases strings.Builder
-	for i, gid := range gids {
-		cases.WriteString(fmt.Sprintf("WHEN gid = '%s' THEN %d ", gid, sortOrders[i]))
-	}
 
-	// 构建完整的SQL语句
 	tableName := model.ShortLinkGroup{CUsername: username}.TName()
 
-	sql := fmt.Sprintf("UPDATE %s SET sort_order = CASE %s END WHERE gid IN (?) AND c_username = ?", tableName, cases.String())
+	// 构建CASE WHEN THEN语句用于批量更新
+	caseStmt := "CASE"
+	for i, gid := range gids {
+		caseStmt += fmt.Sprintf(" WHEN gid = '%s' THEN %d", gid, sortOrders[i])
+	}
+	caseStmt += " END"
+
+	// 构建完整的批量更新SQL语句
+	query := fmt.Sprintf("UPDATE `%s` SET sort_order = %s WHERE c_username = ? AND gid IN (?)", tableName, caseStmt)
+
 	// 在GORM中使用事务处理
 	err := d.db.Transaction(func(tx *gorm.DB) error {
 		// 使用WithContext确保上下文传递
-		if err := tx.WithContext(ctx).Exec(sql, gids, username).Error; err != nil {
+		if err := tx.WithContext(ctx).Exec(query, username, gids).Error; err != nil {
 			// 如果执行失败，返回错误将自动回滚
 			return err
 		}
@@ -155,12 +153,10 @@ func (d *shortLinkGroupsDao) UpdateSortOrderByGidAndUsername(ctx context.Context
 		return nil
 	})
 
-	// 处理事务结果
 	if err != nil {
 		return fmt.Errorf("failed to update sort order by gid and username: %w", err)
 	}
-	// 更新缓存
-	return d.cache.Del(ctx, username)
+	return nil
 }
 
 // DelByGidAndUsername 根据gid删除分组

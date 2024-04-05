@@ -20,7 +20,13 @@ import (
 
 var _ app.IServer = (*CacheASideService)(nil)
 
-const consumerNumber = 10
+const (
+	// 同时处理旁路更新的消费者数目
+	consumerNumber = 10
+	// 处理的 SQL 行为
+	insertAction = "insert"
+	updateAction = "update"
+)
 
 var (
 	CacheASideServiceName     = "CacheASideService"
@@ -28,12 +34,25 @@ var (
 	ErrStopCacheASideService  = errors.New("Stop CacheASideService...failed")
 )
 
-type cacheHandler func(ctx context.Context, m map[string]any) error
+type cacheHandler func(ctx context.Context, action string, m map[string]any) error
 
 var (
 	cacheHandlerMap = map[string]cacheHandler{
-		model.RedirectPrefix: func(ctx context.Context, m map[string]any) error {
-			return cache.Redirect().Del(ctx, m["uri"].(string))
+		model.RedirectPrefix: func(ctx context.Context, action string, m map[string]any) error {
+			switch action {
+			case insertAction, updateAction:
+				return cache.Redirect().Del(ctx, m["uri"].(string))
+			default:
+				return nil
+			}
+		},
+		model.SLGroupPrefix: func(ctx context.Context, action string, m map[string]any) error {
+			switch action {
+			case insertAction, updateAction:
+				return cache.SLGroup().Del(ctx, m["c_username"].(string))
+			default:
+				return nil
+			}
 		},
 	}
 )
@@ -98,26 +117,28 @@ func handlerCacheMessage(ctx context.Context, ch <-chan *message.Message) {
 			// 获取表名前缀
 			prefix = tableName[:index]
 		}
+		data, ok := payload["data"].(map[string]any)
+		if !ok {
+			logger.Error(fmt.Sprintf("Invalid or missing 'data' in payload for table: %s", tableName), zap.Any("msg", msg))
+			msg.Ack()
+			continue
+		}
 		// 只处理配置的表
 		if fn, ok := cacheHandlerMap[prefix]; ok {
-			data, ok := payload["data"].(map[string]any)
-			if !ok {
-				logger.Error(fmt.Sprintf("Invalid or missing 'data' in payload for table: %s", tableName), zap.Any("msg", msg))
-				msg.Ack()
-				continue
-			}
 
-			// 调用处理函数
-			if err := fn(ctx, data); err != nil {
-				// 此处是因为处理失败,因此不抛弃数据
-				logger.Error(fmt.Sprintf("Error handling data for table %s: %v", tableName, err), zap.Any("msg", msg))
-				msg.Nack()
-				continue
+			if action, ok := payload["type"].(string); ok {
+				// 调用处理函数
+				if err := fn(ctx, action, data); err != nil {
+					// 此处是因为处理失败,因此不抛弃数据
+					logger.Error(fmt.Sprintf("Error handling data for table %s: %v", tableName, err), zap.Any("msg", msg))
+					msg.Nack()
+					continue
+				}
 			}
 		}
 		// 确认消息处理成功
 		msg.Ack()
-		return
+		continue
 	}
 }
 
