@@ -45,9 +45,8 @@ type IShortLinkDao interface {
 }
 
 type shortLinkDao struct {
-	db            *gorm.DB
-	redirectCache cache.IRedirectsCache
-	sfg           *singleflight.Group
+	db  *gorm.DB
+	sfg *singleflight.Group
 }
 
 // NewShortLinkDao 创建 shortLinkDao
@@ -60,7 +59,6 @@ func NewShortLinkDao(db *gorm.DB, client *redis.Client) (IShortLinkDao, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "NewShortLinkDao Failed")
 	}
-	dao.redirectCache, err = cache.NewRedirectsCache(client)
 	if err != nil {
 		return nil, errors.Wrap(err, "NewShortLinkDao Failed")
 	}
@@ -217,7 +215,7 @@ func (d *shortLinkDao) GeRedirectByURI(ctx context.Context, uri string) (*model.
 		return nil, custom_err.ErrRecordNotFound
 	}
 	// 查询缓存，是否查到数据
-	record, err := d.redirectCache.Get(ctx, uri)
+	record, err := cache.Redirect().Get(ctx, uri)
 	if err == nil {
 		if record.OriginalURL == "" {
 			return nil, custom_err.ErrRecordNotFound
@@ -249,7 +247,7 @@ func (d *shortLinkDao) GeRedirectByURI(ctx context.Context, uri string) (*model.
 				return nil, err
 			}
 			// 设置缓存
-			err = d.redirectCache.Set(ctx, uri, record, cache.RedirectsExpireTime)
+			err = cache.Redirect().Set(ctx, uri, record, cache.RedirectsExpireTime)
 			if err != nil {
 				logger.Err(errors.Wrap(err, "设置缓存失败"))
 			}

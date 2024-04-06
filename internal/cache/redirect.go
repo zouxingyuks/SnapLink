@@ -3,9 +3,9 @@ package cache
 import (
 	"SnapLink/internal/custom_err"
 	"SnapLink/internal/model"
+	cache2 "SnapLink/pkg/cache"
 	"context"
 	"encoding/json"
-	"github.com/go-redis/redis/v8"
 	"github.com/pkg/errors"
 	"github.com/zhufuyi/sponge/pkg/logger"
 	"sync"
@@ -13,128 +13,71 @@ import (
 )
 
 const (
-	// cache prefix key for redirects
-	redirectsCachePrefixKey = "redirects:"
-	// RedirectsExpireTime 默认过期时间
-	RedirectsExpireTime = 10 * time.Minute
-	// RedirectsNeverExpireTime 永不过期
-	RedirectsNeverExpireTime = 0
+	RedirectsExpireTime    = 10 * time.Minute
+	RedirectCachePrefixKey = "redirect"
 )
 
-var redirectInstance struct {
-	IRedirectsCache
-	sync.Once
-}
+var redirectInstance = new(redirectsCache)
 
-func Redirect() IRedirectsCache {
-	redirectInstance.Do(func() {
+func Redirect() *redirectsCache {
+	redirectInstance.once.Do(func() {
 		var err error
-		if redirectInstance.IRedirectsCache, err = NewRedirectsCache(model.GetCacheType().Rdb); err != nil {
-			logger.Panic(errors.Wrap(ErrInitCacheFailed, "Redirect").Error())
-			return
+		if redirectInstance.kvCache, err = cache2.NewKVCache(model.GetRedisCli(), cache2.NewKeyGenerator(RedirectCachePrefixKey), LocalCache()); err != nil {
+			logger.Panic(errors.Wrap(custom_err.ErrCacheInitFailed, "RedirectsCache").Error())
 		}
 	})
-	return redirectInstance.IRedirectsCache
+	return redirectInstance
 }
 
-// IRedirectsCache slCache interface
-type IRedirectsCache interface {
-	Set(ctx context.Context, uri string, info *model.Redirect, duration time.Duration) error
-	Get(ctx context.Context, uri string) (*model.Redirect, error)
-	Del(ctx context.Context, uri string) error
-	SetCacheWithNotFound(ctx context.Context, uri string) error
-}
-
-var emptyRedirectBytes = []byte(`{"uri":"","original_url":""}`)
+var emptyRedirect = new(model.Redirect)
 
 // redirectsCache define a cache struct
 type redirectsCache struct {
-	client *redis.Client
-}
-
-// NewRedirectsCache 新建短链接的缓存
-func NewRedirectsCache(client *redis.Client) (IRedirectsCache, error) {
-	var err error
-	cache := &redirectsCache{
-		client: client,
-	}
-
-	if err != nil {
-		return nil, err
-	}
-	return cache, nil
-}
-
-// GetRedirectsCacheKey cache key
-func (c *redirectsCache) GetRedirectsCacheKey(uri string) string {
-	return redirectsCachePrefixKey + uri
+	kvCache cache2.IKVCache
+	once    sync.Once
 }
 
 // Set write to cache
-func (c *redirectsCache) Set(ctx context.Context, uri string, redirect *model.Redirect, duration time.Duration) error {
-	if redirect == nil || uri == "" {
-		return nil
+func (c *redirectsCache) Set(ctx context.Context, uri string, redirect *model.Redirect, ttl time.Duration) error {
+	jsonBytes, err := json.Marshal(redirect)
+	if err != nil {
+		return errors.Wrap(custom_err.ErrCacheSetFailed, err.Error())
 	}
-	key := c.GetRedirectsCacheKey(uri)
-	jsonBytes, _ := json.Marshal(redirect)
-
-	// 设置本地缓存
-	_ = LocalCache().Set(key, jsonBytes, 1)
-	// 设置分布式缓存
-	err := c.client.Set(ctx, key, jsonBytes, duration).Err()
-	return err
+	if err = c.kvCache.Set(ctx, uri, string(jsonBytes), ttl); err != nil {
+		return errors.Wrap(custom_err.ErrCacheSetFailed, err.Error())
+	}
+	return nil
 }
 
 // Get 获取缓存
 func (c *redirectsCache) Get(ctx context.Context, uri string) (*model.Redirect, error) {
-	key := c.GetRedirectsCacheKey(uri)
+	value, err := c.kvCache.Get(ctx, uri)
+	if errors.Is(err, cache2.ErrCacheNotFound) {
+		return nil, custom_err.ErrCacheNotFound
+	}
+	if value == cache2.EmptyValue {
+		return emptyRedirect, nil
+	}
 	redirect := new(model.Redirect)
-	var (
-		jsonBytes []byte
-		err       error
-		ok        bool
-	)
-
-	//从本地缓存查询
-	if data, exist := LocalCache().Get(key); exist {
-		jsonBytes, ok = (data).([]byte)
-	}
-	//如果本地缓存没查到
-	if !ok {
-		//从分布式缓存查询
-		jsonBytes, err = c.client.Get(ctx, key).Bytes()
-		if err != nil {
-			if errors.Is(err, redis.Nil) {
-				return nil, custom_err.ErrCacheNotFound
-			}
-			return nil, err
-		}
-		//更新数据到本地缓存
-		_ = LocalCache().Set(key, jsonBytes, 1)
-	}
-
-	err = json.Unmarshal(jsonBytes, redirect)
+	err = json.Unmarshal([]byte(value), redirect)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(custom_err.ErrCacheGetFailed, err.Error())
 	}
 	return redirect, nil
 }
 
 // Del 删除缓存
 func (c *redirectsCache) Del(ctx context.Context, uri string) error {
-	key := c.GetRedirectsCacheKey(uri)
-	//删除本地缓存
-	LocalCache().Del(key)
-	err := c.client.Del(ctx, key).Err()
-	return err
+	if err := c.kvCache.Del(ctx, uri); err != nil {
+		return errors.Wrap(custom_err.ErrCacheDelFailed, err.Error())
+	}
+	return nil
 }
 
 // SetCacheWithNotFound 设置不存在的缓存，以防止缓存穿透，默认过期时间 10 分钟
 func (c *redirectsCache) SetCacheWithNotFound(ctx context.Context, uri string) error {
-	key := c.GetRedirectsCacheKey(uri)
-	err := c.client.Set(ctx, key, emptyRedirectBytes, RedirectsExpireTime).Err()
-	if err != nil {
-		return err
+	if err := c.kvCache.SetEmpty(ctx, uri, RedirectsExpireTime); err != nil {
+		return errors.Wrap(custom_err.ErrCacheSetFailed, err.Error())
 	}
 	return nil
 }

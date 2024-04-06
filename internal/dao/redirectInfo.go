@@ -20,9 +20,8 @@ type RedirectsDao interface {
 	CleanUp(ctx context.Context)
 }
 type redirectsDao struct {
-	db    *gorm.DB
-	cache cache.IRedirectsCache
-	sfg   *singleflight.Group
+	db  *gorm.DB
+	sfg *singleflight.Group
 }
 
 // NewRedirectsDao 创建数据层接口
@@ -32,7 +31,6 @@ func NewRedirectsDao(db *gorm.DB, client *redis.Client) (RedirectsDao, error) {
 		db:  db,
 		sfg: new(singleflight.Group),
 	}
-	d.cache, err = cache.NewRedirectsCache(client)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +47,7 @@ func (d *redirectsDao) GetByURI(ctx context.Context, uri string) (*model.Redirec
 		return nil, custom_err.ErrRecordNotFound
 	}
 	// 查询缓存，是否查到数据
-	record, err := d.cache.Get(ctx, uri)
+	record, err := cache.Redirect().Get(ctx, uri)
 	if err == nil {
 		if record.OriginalURL == "" {
 			return nil, custom_err.ErrRecordNotFound
@@ -72,7 +70,7 @@ func (d *redirectsDao) GetByURI(ctx context.Context, uri string) (*model.Redirec
 			if err != nil {
 				// 设置空值来防御缓存穿透
 				if errors.Is(err, custom_err.ErrRecordNotFound) {
-					err = d.cache.SetCacheWithNotFound(ctx, uri)
+					err = cache.Redirect().SetCacheWithNotFound(ctx, uri)
 					if err != nil {
 						return nil, err
 					}
@@ -81,7 +79,7 @@ func (d *redirectsDao) GetByURI(ctx context.Context, uri string) (*model.Redirec
 				return nil, err
 			}
 			// 设置缓存
-			err = d.cache.Set(ctx, uri, record, cache.RedirectsExpireTime)
+			err = cache.Redirect().Set(ctx, uri, record, cache.RedirectsExpireTime)
 			if err != nil {
 				logger.Err(errors.Wrap(err, "设置缓存失败"))
 			}

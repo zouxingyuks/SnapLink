@@ -96,6 +96,7 @@ func (c *kvCache) SetEmpty(ctx context.Context, key string, ttl time.Duration) e
 func (c *kvCache) Del(ctx context.Context, key string) error {
 	key = c.keyGen(key)
 	_, err, shared := c.sfg.Do(key, func() (interface{}, error) {
+		c.localCache.Del(key)
 		return nil, c.client.Del(ctx, key).Err()
 	})
 	if err != nil {
@@ -108,6 +109,7 @@ func (c *kvCache) Del(ctx context.Context, key string) error {
 			return nil, c.client.Del(ctx, key).Err()
 		})
 		if err != nil {
+			c.localCache.Del(key)
 			return errors.Wrap(ErrDelFailed, err.Error())
 		}
 	}

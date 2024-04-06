@@ -5,7 +5,6 @@ import (
 	"SnapLink/internal/model"
 	cache2 "SnapLink/pkg/cache"
 	"context"
-	"github.com/go-redis/redis/v8"
 	"github.com/pkg/errors"
 	"github.com/zhufuyi/sponge/pkg/logger"
 	"strconv"
@@ -14,38 +13,29 @@ import (
 )
 
 const (
-	// ShortLinkGroupCountExpireTime expire time
 	ShortLinkGroupCountExpireTime = 10 * time.Minute
 	ShortLinkGroupCountPrefix     = "sl_count"
-	EmptyShortLinkGroupCount      = -1
 )
 
-var shortLinkGroupCountInstance = new(struct {
-	*shortLinkGroupCountCache
-	sync.Once
-})
+var (
+	shortLinkGroupCountInstance = new(shortLinkGroupCountCache)
+	emptyCount                  = int64(0)
+)
 
 func ShortLinkGroupCountCache() *shortLinkGroupCountCache {
-	shortLinkGroupCountInstance.Once.Do(func() {
+	shortLinkGroupCountInstance.once.Do(func() {
 		var err error
-		if shortLinkGroupCountInstance.shortLinkGroupCountCache, err = NewShortLinkGroupCountCache(model.GetRedisCli(), nil); err != nil {
-			logger.Panic(errors.Wrap(ErrInitCacheFailed, "ShortLinkGroupCountCache").Error())
+		if shortLinkGroupCountInstance.kvCache, err = cache2.NewKVCache(model.GetRedisCli(), cache2.NewKeyGenerator(ShortLinkGroupCountPrefix), LocalCache()); err != nil {
+			logger.Panic(errors.Wrap(custom_err.ErrCacheInitFailed, "ShortLinkGroupCountCache").Error())
 		}
 	})
-	return shortLinkGroupCountInstance.shortLinkGroupCountCache
+	return shortLinkGroupCountInstance
 }
 
 // shortLinkGroupCountCache define a cache struct
 type shortLinkGroupCountCache struct {
 	kvCache cache2.IKVCache
-}
-
-// NewShortLinkGroupCountCache new a cache
-func NewShortLinkGroupCountCache(client *redis.Client, localCache cache2.ILocalCache) (*shortLinkGroupCountCache, error) {
-	var err error
-	cache := new(shortLinkGroupCountCache)
-	cache.kvCache, err = cache2.NewKVCache(client, cache2.NewKeyGenerator(ShortLinkGroupCountPrefix), localCache)
-	return cache, err
+	once    sync.Once
 }
 
 // Get 获取分组下的短链接数量
@@ -55,31 +45,37 @@ func (c *shortLinkGroupCountCache) Get(ctx context.Context, gid string) (int64, 
 		return 0, custom_err.ErrCacheNotFound
 	}
 	if value == cache2.EmptyValue {
-		return 0, nil
+		return emptyCount, nil
 	}
 	count, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
-		return 0, err
+		return emptyCount, errors.Wrap(custom_err.ErrCacheGetFailed, err.Error())
 	}
-	if count == EmptyShortLinkGroupCount {
-		return 0, custom_err.ErrCacheNotFound
-	}
-	return count, err
+	return count, nil
 
 }
 
 // Set 设置分组下的短链接数量
 func (c *shortLinkGroupCountCache) Set(ctx context.Context, gid string, count int64) error {
 	value := strconv.Itoa(int(count))
-	return c.kvCache.Set(ctx, gid, value, ShortLinkGroupCountExpireTime)
+	if err := c.kvCache.Set(ctx, gid, value, ShortLinkGroupCountExpireTime); err != nil {
+		return errors.Wrap(custom_err.ErrCacheSetFailed, err.Error())
+	}
+	return nil
 }
 
 // SetCacheWithNotFound 设置空值来防御缓存穿透
 func (c *shortLinkGroupCountCache) SetCacheWithNotFound(ctx context.Context, gid string) error {
-	return c.kvCache.SetEmpty(ctx, gid, ShortLinkGroupCountExpireTime)
+	if err := c.kvCache.SetEmpty(ctx, gid, ShortLinkGroupCountExpireTime); err != nil {
+		return errors.Wrap(custom_err.ErrCacheSetFailed, err.Error())
+	}
+	return nil
 }
 
 // Del 删除数据键值
 func (c *shortLinkGroupCountCache) Del(ctx context.Context, gid string) error {
-	return c.kvCache.Del(ctx, gid)
+	if err := c.kvCache.Del(ctx, gid); err != nil {
+		return errors.Wrap(custom_err.ErrCacheDelFailed, err.Error())
+	}
+	return nil
 }

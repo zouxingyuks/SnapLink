@@ -46,8 +46,7 @@ var (
 			case insertAction, deleteAction:
 				{
 					//处理对应的 gid 数目更新
-
-					return nil
+					return cache.ShortLinkGroupCountCache().Del(ctx, m["gid"].(string))
 				}
 			default:
 				return nil
@@ -86,7 +85,7 @@ func NewCacheASideService() app.IServer {
 func (s *CacheASideService) Start() error {
 
 	for i := 0; i < consumerNumber; i++ {
-		ch, err := s.subscriber.Subscribe(s.ctx, "maxwell")
+		ch, err := s.subscriber.Subscribe(s.ctx, "saas")
 		if err != nil {
 			return errors.Wrap(ErrStartCacheASideService, err.Error())
 		}
