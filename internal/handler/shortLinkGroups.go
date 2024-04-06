@@ -34,7 +34,7 @@ func NewShortLinkGroupHandler() ShortLinkGroupHandler {
 	return &shortLinkGroupsHandler{
 		iDao: dao.NewShortLinkGroupDao(
 			model.GetDB(),
-			cache.NewShortLinkGroupCache(model.GetCacheType()),
+			cache.SLGroup(),
 		),
 	}
 }
@@ -53,7 +53,7 @@ func NewShortLinkGroupHandler() ShortLinkGroupHandler {
 // @Failure 400 string "{"msg": "参数错误"}"
 // @Redirect /api/v1/slink/group [post]
 func (h *shortLinkGroupsHandler) Create(c *gin.Context) {
-	param := new(types.CreateShortLinkGroupRequest)
+	param := new(types.ShortLinkGroupCreateReq)
 
 	if err := c.ShouldBindJSON(param); err != nil {
 		serialize.NewResponseWithErrCode(ecode.RequestParamError, serialize.WithErr(err)).ToJSON(c)
@@ -97,7 +97,19 @@ func (h *shortLinkGroupsHandler) List(c *gin.Context) {
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
 		return
 	}
-	serialize.NewResponse(200, serialize.WithData(groups)).ToJSON(c)
+	res := make([]*types.ShortLinkGroupListItem, 0, len(groups))
+	for _, group := range groups {
+		count, err := dao.ShortLinkDao().Count(ctx, group.Gid)
+		if err != nil {
+			serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
+			return
+		}
+		res = append(res, types.NewShortLinkGroupListItem(map[string]any{
+			"group": group,
+			"count": count,
+		}))
+	}
+	serialize.NewResponse(200, serialize.WithData(res)).ToJSON(c)
 }
 
 // UpdateByGID 根据gid更新短链接分组
@@ -116,9 +128,9 @@ func (h *shortLinkGroupsHandler) List(c *gin.Context) {
 // @Failure 500 string "{"msg": "更新失败"}"
 // @Redirect /api/v1/slink/group [put]
 func (h *shortLinkGroupsHandler) UpdateByGID(c *gin.Context) {
-	form := new(types.UpdateShortLinkGroupByGIDRequest)
+	req := new(types.ShortLinkGroupUpdateByGIDReq)
 
-	if err := c.ShouldBind(form); err != nil {
+	if err := c.ShouldBind(req); err != nil {
 		serialize.NewResponseWithErrCode(ecode.RequestParamError, serialize.WithErr(err)).ToJSON(c)
 		return
 	}
@@ -126,7 +138,7 @@ func (h *shortLinkGroupsHandler) UpdateByGID(c *gin.Context) {
 	claims, _ := jwt.ParseToken(c.GetHeader("Authorization")[7:])
 	username := claims.UID
 	ctx := middleware.WrapCtx(c)
-	group, err := h.iDao.UpdateByGidAndUsername(ctx, form.Gid, form.Name, username)
+	group, err := h.iDao.UpdateByGidAndUsername(ctx, req.Gid, req.Name, username)
 	if err != nil {
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
 		return
@@ -169,7 +181,7 @@ func (h *shortLinkGroupsHandler) DelByGID(c *gin.Context) {
 // @Param sort_order body int true "排序标识"
 // @Success 200 {object} types.UpdateSortOrderRespond{}
 func (h *shortLinkGroupsHandler) UpdateSortOrder(c *gin.Context) {
-	form := make([]types.UpdateShortLinkGroupSortOrderRequest, 0)
+	form := make([]types.ShortLinkGroupUpdateSortOrderReq, 0)
 	if err := c.ShouldBind(&form); err != nil {
 		serialize.NewResponseWithErrCode(ecode.RequestParamError, serialize.WithErr(err)).ToJSON(c)
 		return
