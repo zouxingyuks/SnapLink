@@ -40,7 +40,7 @@ type ShortLinkHandler interface {
 }
 
 type shortLinkHandler struct {
-	iDao dao.ShortLinkDao
+	iDao dao.IShortLinkDao
 }
 
 // NewShortLinkHandler creating the handler interface

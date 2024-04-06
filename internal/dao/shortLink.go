@@ -9,15 +9,30 @@ import (
 	"github.com/pkg/errors"
 	cacheBase "github.com/zhufuyi/sponge/pkg/cache"
 	"github.com/zhufuyi/sponge/pkg/logger"
+	"sync"
 
 	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 )
 
-var _ ShortLinkDao = (*shortLinkDao)(nil)
+var instanceShortLink struct {
+	IShortLinkDao
+	sync.Once
+}
 
-// ShortLinkDao 定义接口
-type ShortLinkDao interface {
+func ShortLinkDao() IShortLinkDao {
+	instanceShortLink.Once.Do(func() {
+		var err error
+		instanceShortLink.IShortLinkDao, err = NewShortLinkDao(model.GetDB(), model.GetRedisCli())
+		if err != nil {
+			logger.Panic(errors.Wrap(ErrInitDaoFailed, err.Error()).Error())
+		}
+	})
+	return instanceShortLink.IShortLinkDao
+}
+
+// IShortLinkDao 定义接口
+type IShortLinkDao interface {
 	Create(ctx context.Context, table *model.ShortLink) error
 	CreateBatch(ctx context.Context, tables []*model.ShortLink) (*model.ShortLink, error)
 	List(ctx context.Context, gid string, page, pageSize int) ([]*model.ShortLink, error)
@@ -36,7 +51,7 @@ type shortLinkDao struct {
 }
 
 // NewShortLinkDao 创建 shortLinkDao
-func NewShortLinkDao(db *gorm.DB, client *redis.Client) (ShortLinkDao, error) {
+func NewShortLinkDao(db *gorm.DB, client *redis.Client) (IShortLinkDao, error) {
 	var err error
 	dao := &shortLinkDao{
 		db:  db,

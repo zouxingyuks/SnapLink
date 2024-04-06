@@ -1,0 +1,10 @@
+# nacos settings
+nacos:
+  ipAddr: "127.0.0.1"    # server address
+  port: 8848                      # listening port
+  scheme: "http"               # http or grpc
+  contextPath: "/nacos"     # path
+  namespaceID: "3f68758b-0c2e-487f-ba1f-46b135fbe8ee" # namespace id
+  group: "dev"                    # group name: dev, prod, test
+  dataID: "SnapLink.yml"  # config file id
+  format: "yaml"                 # configuration file type: json,yaml,toml

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"SnapLink/cmd/SnapLink/initial"
+	"SnapLink/internal/initial"
 )
 
 func main() {

@@ -168,7 +168,7 @@ func (h *UsersHandler) Register(c *gin.Context) {
 	if err != nil {
 		//布隆过滤器的漏网之鱼
 
-		if dao.DuplicateEntry.Is(err) {
+		if dao.ErrDuplicateEntry.Is(err) {
 			serialize.NewResponseWithErrCode(ecode.UserNameExistError, serialize.WithErr(err)).ToJSON(c)
 			bloomFilter.BFAdd(ctx, "username", u.Username)
 			return

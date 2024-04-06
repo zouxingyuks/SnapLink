@@ -2,8 +2,7 @@
 package main
 
 import (
-	"SnapLink/cmd/SnapLink/initial"
-
+	"SnapLink/internal/initial"
 	"github.com/zhufuyi/sponge/pkg/app"
 )
 

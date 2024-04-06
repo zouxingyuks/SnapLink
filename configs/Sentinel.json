@@ -1,0 +1,16 @@
+[
+  {
+    "resource": "/fix/rebuildbf",
+    "tokenCalculateStrategy": 0,
+    "controlBehavior": 0,
+    "threshold": 2,
+    "statIntervalInMs": 60000
+  },
+  {
+    "resource": "POST /shortlink",
+    "tokenCalculateStrategy": 0,
+    "controlBehavior": 0,
+    "threshold": 1,
+    "statIntervalInMs": 60000
+  }
+]
