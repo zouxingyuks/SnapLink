@@ -126,6 +126,7 @@ func (d *shortLinkDao) List(ctx context.Context, gid string, page, pageSize int)
 		Select("id").
 		Table(tableName).
 		Where("gid = ?", gid).
+		Order("id").
 		Limit(1).
 		Offset((page - 1) * pageSize)
 	// 主查询
@@ -133,6 +134,7 @@ func (d *shortLinkDao) List(ctx context.Context, gid string, page, pageSize int)
 		Table(tableName).
 		Where("gid = ?", gid).
 		Where("id >= (?)", subQuery).
+		Order("id").
 		Limit(pageSize).
 		Find(&list).Error
 	return list, err
