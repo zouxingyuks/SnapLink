@@ -52,7 +52,7 @@ func (c *redirectsCache) Set(ctx context.Context, uri string, redirect *model.Re
 // Get 获取缓存
 func (c *redirectsCache) Get(ctx context.Context, uri string) (*model.Redirect, error) {
 	value, err := c.kvCache.Get(ctx, uri)
-	if errors.Is(err, cache2.ErrCacheNotFound) {
+	if errors.Is(err, cache2.ErrKVCacheNotFound) {
 		return nil, custom_err.ErrCacheNotFound
 	}
 	if value == cache2.EmptyValue {
@@ -76,7 +76,7 @@ func (c *redirectsCache) Del(ctx context.Context, uri string) error {
 
 // SetCacheWithNotFound 设置不存在的缓存，以防止缓存穿透，默认过期时间 10 分钟
 func (c *redirectsCache) SetCacheWithNotFound(ctx context.Context, uri string) error {
-	if err := c.kvCache.SetEmpty(ctx, uri, RedirectsExpireTime); err != nil {
+	if err := c.kvCache.SetCacheWithNotFound(ctx, uri, RedirectsExpireTime); err != nil {
 		return errors.Wrap(custom_err.ErrCacheSetFailed, err.Error())
 	}
 	return nil

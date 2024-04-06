@@ -1,7 +1,6 @@
 package dao
 
 import (
-	"SnapLink/internal/bloomFilter"
 	"SnapLink/internal/cache"
 	"SnapLink/internal/model"
 	"context"
@@ -231,7 +230,7 @@ func (d *tUserDao) GetByUsername(ctx context.Context, username string) (*model.T
 func (d *tUserDao) HasUsername(ctx context.Context, username string) (bool, error) {
 
 	//1. 在布隆过滤器中查询
-	result, err := bloomFilter.BFExists(ctx, "username", username)
+	result, err := cache.BFCache().BFExists(ctx, "username", username)
 	if err != nil {
 		return true, err
 	}

@@ -25,17 +25,15 @@ type ShortLinkGroupDao interface {
 	DelByGidAndUsername(ctx context.Context, gid, username string) error
 }
 type shortLinkGroupsDao struct {
-	db    *gorm.DB
-	cache cache.IShortLinkGroupCache
-	sfg   *singleflight.Group
+	db  *gorm.DB
+	sfg *singleflight.Group
 }
 
 // NewShortLinkGroupDao creating the dao interface
-func NewShortLinkGroupDao(db *gorm.DB, xCache cache.IShortLinkGroupCache) ShortLinkGroupDao {
+func NewShortLinkGroupDao(db *gorm.DB) ShortLinkGroupDao {
 	return &shortLinkGroupsDao{
-		db:    db,
-		cache: xCache,
-		sfg:   new(singleflight.Group),
+		db:  db,
+		sfg: new(singleflight.Group),
 	}
 }
 
@@ -45,7 +43,7 @@ func (d *shortLinkGroupsDao) Create(ctx context.Context, group *model.ShortLinkG
 	if err != nil {
 		return err
 	}
-	return d.cache.ADD(ctx, group.CUsername, group)
+	return nil
 }
 
 // GetAllByCUser 根据创建人获取所有的分组
@@ -54,7 +52,7 @@ func (d *shortLinkGroupsDao) Create(ctx context.Context, group *model.ShortLinkG
 // 2. 缓存中特别指明没有数据,特别指明没有数据的情况是为了防止缓存穿透,其会返回一个 nil, 用于区别根本没有查到数据的情况
 func (d *shortLinkGroupsDao) GetAllByCUser(ctx context.Context, cUser string) ([]*model.ShortLinkGroup, error) {
 	// 从缓存中获取
-	records, _ := d.cache.GetALL(ctx, cUser)
+	records, _ := cache.SLGroup().Get(ctx, cUser)
 	// 如果缓存中特别指明没有数据，直接返回
 	if records == nil {
 		records = make([]*model.ShortLinkGroup, 0)
@@ -78,9 +76,9 @@ func (d *shortLinkGroupsDao) GetAllByCUser(ctx context.Context, cUser string) ([
 	if len(records) == 0 {
 		// 缓存中特别指明没有数据
 
-		return records, d.cache.SetEmpty(ctx, cUser)
+		return records, cache.SLGroup().SetCacheWithNotFound(ctx, cUser)
 	}
-	return records, d.cache.MADD(ctx, cUser, records)
+	return records, cache.SLGroup().Set(ctx, cUser, records)
 
 }
 
@@ -169,5 +167,5 @@ func (d *shortLinkGroupsDao) DelByGidAndUsername(ctx context.Context, gid, usern
 	if err != nil {
 		return err
 	}
-	return d.cache.Del(ctx, username)
+	return cache.SLGroup().Del(ctx, username)
 }

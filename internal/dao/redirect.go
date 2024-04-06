@@ -1,7 +1,6 @@
 package dao
 
 import (
-	"SnapLink/internal/bloomFilter"
 	"SnapLink/internal/cache"
 	"SnapLink/internal/custom_err"
 	"SnapLink/internal/model"
@@ -42,7 +41,7 @@ func (d *redirectsDao) GetByURI(ctx context.Context, uri string) (*model.Redirec
 	// 使用布隆过滤器进行数据存在性判断
 	// 如果不存在，则直接返回
 	// 此处使用布隆过滤器的原因是: 减少大量空值造成的缓存内存占用过大
-	exist, err := bloomFilter.BFExists(ctx, "uri", uri)
+	exist, err := cache.BFCache().BFExists(ctx, "uri", uri)
 	if !exist {
 		return nil, custom_err.ErrRecordNotFound
 	}

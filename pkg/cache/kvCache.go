@@ -16,7 +16,7 @@ const defaultTTL = time.Minute * 10
 type IKVCache interface {
 	Get(ctx context.Context, key string) (string, error)
 	Set(ctx context.Context, key string, value string, ttl time.Duration) error
-	SetEmpty(ctx context.Context, key string, ttl time.Duration) error
+	SetCacheWithNotFound(ctx context.Context, key string, ttl time.Duration) error
 	Del(ctx context.Context, key string) error
 }
 
@@ -50,14 +50,14 @@ func (c *kvCache) Get(ctx context.Context, key string) (string, error) {
 	value, err := c.client.Get(ctx, key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return "", ErrCacheNotFound
+			return "", ErrKVCacheNotFound
 		}
 		return "", err
 	}
 	if c.localCache != nil {
 		// 如果 ttl 小于 0，视为永不过期
 		if !c.localCache.SetWithTTL(key, value, 2, defaultTTL) {
-			return "", errors.Wrap(ErrSetLocalCacheFailed, fmt.Sprintf("key: %s, value: %s", key, value))
+			return "", errors.Wrap(ErrKVCacheSetLocalCacheFailed, fmt.Sprintf("key: %s, value: %s", key, value))
 		}
 	}
 	return value, nil
@@ -77,18 +77,18 @@ func (c *kvCache) Set(ctx context.Context, key string, value string, ttl time.Du
 			c.localCache.Set(key, value, 3) // 永不过期的值应该是权重较高的
 		} else {
 			if !c.localCache.SetWithTTL(key, value, 2, ttl) {
-				return errors.Wrap(ErrSetLocalCacheFailed, fmt.Sprintf("key: %s, value: %s", key, value))
+				return errors.Wrap(ErrKVCacheSetLocalCacheFailed, fmt.Sprintf("key: %s, value: %s", key, value))
 			}
 		}
 	}
 	if err := c.client.Set(ctx, key, value, ttl).Err(); err != nil {
-		return errors.Wrap(ErrSetRedisFailed, err.Error())
+		return errors.Wrap(ErrKVCacheSetRedisFailed, err.Error())
 	}
 	return nil
 }
 
-// SetEmpty 空值防御机制
-func (c *kvCache) SetEmpty(ctx context.Context, key string, ttl time.Duration) error {
+// SetCacheWithNotFound 空值防御机制
+func (c *kvCache) SetCacheWithNotFound(ctx context.Context, key string, ttl time.Duration) error {
 	return c.Set(ctx, key, EmptyValue, ttl)
 }
 
@@ -100,7 +100,7 @@ func (c *kvCache) Del(ctx context.Context, key string) error {
 		return nil, c.client.Del(ctx, key).Err()
 	})
 	if err != nil {
-		return errors.Wrap(ErrDelFailed, err.Error())
+		return errors.Wrap(ErrKVCacheDelFailed, err.Error())
 	}
 	// 如果是共享删除的情况，为了避免时间间隔内进行存在数据获取延迟，进行二次删除
 	if shared {
@@ -110,7 +110,7 @@ func (c *kvCache) Del(ctx context.Context, key string) error {
 		})
 		if err != nil {
 			c.localCache.Del(key)
-			return errors.Wrap(ErrDelFailed, err.Error())
+			return errors.Wrap(ErrKVCacheDelFailed, err.Error())
 		}
 	}
 	return nil

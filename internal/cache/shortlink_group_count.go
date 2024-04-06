@@ -41,8 +41,8 @@ type shortLinkGroupCountCache struct {
 // Get 获取分组下的短链接数量
 func (c *shortLinkGroupCountCache) Get(ctx context.Context, gid string) (int64, error) {
 	value, err := c.kvCache.Get(ctx, gid)
-	if errors.Is(err, cache2.ErrCacheNotFound) {
-		return 0, custom_err.ErrCacheNotFound
+	if errors.Is(err, cache2.ErrKVCacheNotFound) {
+		return emptyCount, custom_err.ErrCacheNotFound
 	}
 	if value == cache2.EmptyValue {
 		return emptyCount, nil
@@ -66,7 +66,7 @@ func (c *shortLinkGroupCountCache) Set(ctx context.Context, gid string, count in
 
 // SetCacheWithNotFound 设置空值来防御缓存穿透
 func (c *shortLinkGroupCountCache) SetCacheWithNotFound(ctx context.Context, gid string) error {
-	if err := c.kvCache.SetEmpty(ctx, gid, ShortLinkGroupCountExpireTime); err != nil {
+	if err := c.kvCache.SetCacheWithNotFound(ctx, gid, ShortLinkGroupCountExpireTime); err != nil {
 		return errors.Wrap(custom_err.ErrCacheSetFailed, err.Error())
 	}
 	return nil

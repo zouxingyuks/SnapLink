@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	// cache prefix key, must end with a colon
+	// bfCache prefix key, must end with a colon
 	tUserCachePrefixKey = "tUser:"
 	// TUserExpireTime expire time
 	TUserExpireTime = 5 * time.Minute
@@ -19,7 +19,7 @@ const (
 
 var _ TUserCache = (*tUserCache)(nil)
 
-// TUserCache cache interface
+// TUserCache bfCache interface
 type TUserCache interface {
 	//Set(ctx context.Context, id uint64, data *model.TUser, duration time.Duration) error
 	//Get(ctx context.Context, id uint64) (*model.TUser, error)
@@ -34,7 +34,7 @@ type tUserCache struct {
 	cache cache.Cache
 }
 
-// NewTUserCache new a cache
+// NewTUserCache new a bfCache
 func NewTUserCache(cacheType *model.CacheType) TUserCache {
 	jsonEncoding := encoding.JSONEncoding{}
 	cachePrefix := ""
@@ -53,5 +53,5 @@ func NewTUserCache(cacheType *model.CacheType) TUserCache {
 		return &tUserCache{cache: c}
 	}
 
-	return nil // no cache
+	return nil // no bfCache
 }

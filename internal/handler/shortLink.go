@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"SnapLink/internal/bloomFilter"
+	"SnapLink/internal/cache"
 	"SnapLink/internal/config"
 	"SnapLink/internal/custom_err"
 	"SnapLink/internal/dao"
@@ -455,7 +455,7 @@ func ToHash(u *url.URL) string {
 	uri := GenerateShortLink.GenerateHash(u.Path)
 	for i := 1; i <= 10; i++ {
 		//为了在布隆过滤器挂掉后仍然可以使用,忽略布隆过滤器的错误
-		exist, _ := bloomFilter.BFExists(context.Background(), "uri", uri)
+		exist, _ := cache.BFCache().BFExists(context.Background(), "uri", uri)
 		//如果此数据已经存在，再次生成
 		if exist {
 			uri = GenerateShortLink.GenerateHash(uri + u.Path)
@@ -464,7 +464,7 @@ func ToHash(u *url.URL) string {
 		// 误判的情况有
 		// 1. 误判为存在，但是实际不存在。这种情况可以无视
 		// 2. 误判为不存在，但是实际存在，这种情况可以基于数据库的唯一索引来解决。这种情况主要是由于部分短链接未被加载入布隆过滤器中。
-		_ = bloomFilter.BFAdd(context.Background(), "uri", uri)
+		_ = cache.BFCache().BFAdd(context.Background(), "uri", uri)
 		break
 	}
 	return uri
