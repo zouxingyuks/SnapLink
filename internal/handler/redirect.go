@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"SnapLink/internal/custom_err"
 	"SnapLink/internal/dao"
 	"SnapLink/internal/model"
 	"SnapLink/pkg/serialize"
@@ -39,7 +40,7 @@ func (h *RedirectHandler) Redirect(c *gin.Context) {
 	ctx := c.Request.Context()
 	info, err := h.iDao.GetByURI(ctx, shortUri)
 	if err != nil {
-		if errors.Is(err, model.ErrRecordNotFound) {
+		if errors.Is(err, custom_err.ErrRecordNotFound) {
 			serialize.NewResponse(404, serialize.WithMsg("短链接不存在")).ToJSON(c)
 			return
 		}

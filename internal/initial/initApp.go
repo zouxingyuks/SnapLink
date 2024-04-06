@@ -87,11 +87,11 @@ func initConfig() {
 		_ = copier.Copy(params, &nacosConfig.Nacos)
 		format, data, err := nacoscli.GetConfig(params)
 		if err != nil {
-			panic(fmt.Sprintf("connect to configuration center err, %v", err))
+			panic(fmt.Sprintf("connect to configuration center custom_err, %v", err))
 		}
 		err = conf.ParseConfigData(data, format, appConfig)
 		if err != nil {
-			panic(fmt.Sprintf("parse config data err, %v", err))
+			panic(fmt.Sprintf("parse config data custom_err, %v", err))
 		}
 		if appConfig.App.Name == "" {
 			panic("read the config from center error, config data is empty")

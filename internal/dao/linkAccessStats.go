@@ -113,17 +113,17 @@ func (d *LinkAccessStatisticDao) GetRecord(ctx context.Context, uri string, star
 //// 由于此数据是写多读少的数据，所以采用定时任务的方式进行数据的更新
 //func (d *LinkAccessStatisticDao) Set(ctx context.Context, data *model.LinkAccessStatistic) error {
 //	m := make(map[string]interface{})
-//	bytes, err := json.Marshal(data)
-//	if err != nil {
-//		return err
+//	bytes, custom_err := json.Marshal(data)
+//	if custom_err != nil {
+//		return custom_err
 //	}
-//	err = json.Unmarshal(bytes, &m)
-//	if err != nil {
-//		return err
+//	custom_err = json.Unmarshal(bytes, &m)
+//	if custom_err != nil {
+//		return custom_err
 //	}
-//	err = d.slCache.Set(ctx, m)
-//	if err != nil {
-//		return err
+//	custom_err = d.slCache.Set(ctx, m)
+//	if custom_err != nil {
+//		return custom_err
 //	}
 //	return nil
 //}

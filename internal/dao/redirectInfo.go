@@ -3,6 +3,7 @@ package dao
 import (
 	"SnapLink/internal/bloomFilter"
 	"SnapLink/internal/cache"
+	"SnapLink/internal/custom_err"
 	"SnapLink/internal/model"
 	"context"
 	"github.com/go-redis/redis/v8"
@@ -45,17 +46,17 @@ func (d *redirectsDao) GetByURI(ctx context.Context, uri string) (*model.Redirec
 	// 此处使用布隆过滤器的原因是: 减少大量空值造成的缓存内存占用过大
 	exist, err := bloomFilter.BFExists(ctx, "uri", uri)
 	if !exist {
-		return nil, model.ErrRecordNotFound
+		return nil, custom_err.ErrRecordNotFound
 	}
 	// 查询缓存，是否查到数据
 	record, err := d.cache.Get(ctx, uri)
 	if err == nil {
 		if record.OriginalURL == "" {
-			return nil, model.ErrRecordNotFound
+			return nil, custom_err.ErrRecordNotFound
 		}
 		return record, nil
 	}
-	if errors.Is(err, model.ErrCacheNotFound) {
+	if errors.Is(err, custom_err.ErrCacheNotFound) {
 		// 基于 singleflight 进行并发调用合并,主要的性能优化点在于:
 		//1. 减少数据库压力：通过合并请求，减少了对数据库的总体访问次数，从而降低了数据库的负载。
 		//2. 节省时间：避免了多次加锁解锁的过程，因为对于相同的资源只进行了一次查询，减少了时间消耗。
@@ -70,12 +71,12 @@ func (d *redirectsDao) GetByURI(ctx context.Context, uri string) (*model.Redirec
 			err = d.db.WithContext(ctx).Table(record.TName()).Where("uri = ?", uri).First(record).Error
 			if err != nil {
 				// 设置空值来防御缓存穿透
-				if errors.Is(err, model.ErrRecordNotFound) {
+				if errors.Is(err, custom_err.ErrRecordNotFound) {
 					err = d.cache.SetCacheWithNotFound(ctx, uri)
 					if err != nil {
 						return nil, err
 					}
-					return nil, model.ErrRecordNotFound
+					return nil, custom_err.ErrRecordNotFound
 				}
 				return nil, err
 			}
@@ -91,11 +92,11 @@ func (d *redirectsDao) GetByURI(ctx context.Context, uri string) (*model.Redirec
 		}
 		info, ok := val.(*model.Redirect)
 		if !ok {
-			return nil, model.ErrRecordNotFound
+			return nil, custom_err.ErrRecordNotFound
 		}
 		return info, nil
 	} else if errors.Is(err, cacheBase.ErrPlaceholder) {
-		return nil, model.ErrRecordNotFound
+		return nil, custom_err.ErrRecordNotFound
 	}
 
 	// 快速失败，如果是其他错误，直接返回

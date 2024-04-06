@@ -3,6 +3,7 @@ package handler
 import (
 	"SnapLink/internal/bloomFilter"
 	"SnapLink/internal/config"
+	"SnapLink/internal/custom_err"
 	"SnapLink/internal/dao"
 	"SnapLink/internal/ecode"
 	"SnapLink/internal/elasticsearch"
@@ -396,7 +397,7 @@ func (h *shortLinkHandler) Update(c *gin.Context) {
 	info, err := h.iDao.GeRedirectByURI(ctx, form.Uri)
 	if err != nil {
 		// 尝试从此处进行攻击，对此进行防御
-		if errors.Is(err, model.ErrRecordNotFound) {
+		if errors.Is(err, custom_err.ErrRecordNotFound) {
 			serialize.NewResponseWithErrCode(ecode.ClientError, serialize.WithErr(err)).ToJSON(c)
 			return
 		}

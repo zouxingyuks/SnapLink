@@ -26,6 +26,7 @@ const (
 	// 处理的 SQL 行为
 	insertAction = "insert"
 	updateAction = "update"
+	deleteAction = "delete"
 )
 
 var (
@@ -40,8 +41,14 @@ var (
 	cacheHandlerMap = map[string]cacheHandler{
 		model.RedirectPrefix: func(ctx context.Context, action string, m map[string]any) error {
 			switch action {
-			case insertAction, updateAction:
+			case updateAction:
 				return cache.Redirect().Del(ctx, m["uri"].(string))
+			case insertAction, deleteAction:
+				{
+					//处理对应的 gid 数目更新
+
+					return nil
+				}
 			default:
 				return nil
 			}

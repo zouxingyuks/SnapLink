@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"SnapLink/internal/custom_err"
 	"SnapLink/internal/model"
 	"context"
 	"encoding/json"
@@ -29,7 +30,7 @@ func Redirect() IRedirectsCache {
 	redirectInstance.Do(func() {
 		var err error
 		if redirectInstance.IRedirectsCache, err = NewRedirectsCache(model.GetCacheType().Rdb); err != nil {
-			logger.Panic("Init cache.Redirect() failed")
+			logger.Panic(errors.Wrap(ErrInitCacheFailed, "Redirect").Error())
 			return
 		}
 	})
@@ -104,7 +105,7 @@ func (c *redirectsCache) Get(ctx context.Context, uri string) (*model.Redirect, 
 		jsonBytes, err = c.client.Get(ctx, key).Bytes()
 		if err != nil {
 			if errors.Is(err, redis.Nil) {
-				return nil, model.ErrCacheNotFound
+				return nil, custom_err.ErrCacheNotFound
 			}
 			return nil, err
 		}

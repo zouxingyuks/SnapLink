@@ -17,14 +17,6 @@ import (
 )
 
 var (
-	// ErrCacheNotFound No hit cache
-	ErrCacheNotFound = redis.Nil
-
-	// ErrRecordNotFound no records found
-	ErrRecordNotFound = gorm.ErrRecordNotFound
-)
-
-var (
 	db    *gorm.DB
 	once1 sync.Once
 

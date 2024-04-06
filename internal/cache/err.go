@@ -6,4 +6,5 @@ var (
 	ErrInitCacheFailed = errors.New("init cache failed")
 	ErrMarshalType     = errors.New("ErrMarshalType")
 	ErrUnmarshalType   = errors.New("ErrUnmarshalType")
+	ErrDelFailed       = errors.New("del data failed")
 )

@@ -3,6 +3,7 @@ package dao
 import (
 	"SnapLink/internal/bloomFilter"
 	"SnapLink/internal/cache"
+	"SnapLink/internal/custom_err"
 	"SnapLink/internal/model"
 	"context"
 	"github.com/go-redis/redis/v8"
@@ -45,7 +46,6 @@ type IShortLinkDao interface {
 
 type shortLinkDao struct {
 	db            *gorm.DB
-	slCache       cache.ShortLinkCache
 	redirectCache cache.IRedirectsCache
 	sfg           *singleflight.Group
 }
@@ -57,7 +57,6 @@ func NewShortLinkDao(db *gorm.DB, client *redis.Client) (IShortLinkDao, error) {
 		db:  db,
 		sfg: new(singleflight.Group),
 	}
-	dao.slCache, err = cache.NewShortLinkCache(client)
 	if err != nil {
 		return nil, errors.Wrap(err, "NewShortLinkDao Failed")
 	}
@@ -123,7 +122,7 @@ func (d *shortLinkDao) List(ctx context.Context, gid string, page, pageSize int)
 	var list []*model.ShortLink
 	tableName := (&model.ShortLink{Gid: gid}).TName()
 	//sql := fmt.Sprintf("SELECT * FROM %s WHERE gid =? AND id >= (SELECT id FROM %s WHERE gid = ? LIMIT 1 OFFSET ?) ORDER BY id LIMIT ?", tableName, tableName)
-	//err := d.db.WithContext(ctx).Table(tableName).Raw(sql, gid, gid, (page-1)*pageSize, pageSize).Find(&list).Error
+	//custom_err := d.db.WithContext(ctx).Table(tableName).Raw(sql, gid, gid, (page-1)*pageSize, pageSize).Find(&list).Error
 	// 构建子查询
 	subQuery := d.db.WithContext(ctx).
 		Select("id").
@@ -143,12 +142,12 @@ func (d *shortLinkDao) List(ctx context.Context, gid string, page, pageSize int)
 
 // Count 计算总数
 func (d *shortLinkDao) Count(ctx context.Context, gid string) (int64, error) {
-	count, err := d.slCache.GetCount(ctx, gid)
+	count, err := cache.ShortLinkGroupCountCache().Get(ctx, gid)
 	if err == nil {
 		return count, nil
 	}
 
-	if errors.Is(err, model.ErrCacheNotFound) {
+	if errors.Is(err, custom_err.ErrCacheNotFound) {
 		val, err, _ := d.sfg.Do(gid, func() (interface{}, error) { //nolint
 			// 从数据库中查询
 			tableName := model.ShortLink{Gid: gid}.TName()
@@ -156,17 +155,17 @@ func (d *shortLinkDao) Count(ctx context.Context, gid string) (int64, error) {
 			err = d.db.WithContext(ctx).Table(tableName).Where("gid = ?", gid).Count(total).Error
 			if err != nil {
 				// 设置空值来防御缓存穿透
-				if errors.Is(err, model.ErrRecordNotFound) {
-					err = d.slCache.SetCacheWithNotFound(ctx, gid)
+				if errors.Is(err, custom_err.ErrRecordNotFound) {
+					err = cache.ShortLinkGroupCountCache().SetCacheWithNotFound(ctx, gid)
 					if err != nil {
 						return nil, err
 					}
-					return nil, model.ErrRecordNotFound
+					return nil, custom_err.ErrRecordNotFound
 				}
 				return nil, err
 			}
 			// 设置缓存
-			err = d.slCache.SetCount(ctx, gid, *total)
+			err = cache.ShortLinkGroupCountCache().Set(ctx, gid, *total)
 			if err != nil {
 				logger.Err(errors.Wrap(err, "设置缓存失败"))
 			}
@@ -177,7 +176,7 @@ func (d *shortLinkDao) Count(ctx context.Context, gid string) (int64, error) {
 		}
 		total, ok := val.(*int64)
 		if !ok {
-			return 0, model.ErrRecordNotFound
+			return 0, custom_err.ErrRecordNotFound
 		}
 		return *total, nil
 	}
@@ -215,17 +214,17 @@ func (d *shortLinkDao) GeRedirectByURI(ctx context.Context, uri string) (*model.
 	// 此处使用布隆过滤器的原因是: 减少大量空值造成的缓存内存占用过大
 	exist, err := bloomFilter.BFExists(ctx, "uri", uri)
 	if !exist {
-		return nil, model.ErrRecordNotFound
+		return nil, custom_err.ErrRecordNotFound
 	}
 	// 查询缓存，是否查到数据
 	record, err := d.redirectCache.Get(ctx, uri)
 	if err == nil {
 		if record.OriginalURL == "" {
-			return nil, model.ErrRecordNotFound
+			return nil, custom_err.ErrRecordNotFound
 		}
 		return record, nil
 	}
-	if errors.Is(err, model.ErrCacheNotFound) {
+	if errors.Is(err, custom_err.ErrCacheNotFound) {
 		// 基于 singleflight 进行并发调用合并,主要的性能优化点在于:
 		//1. 减少数据库压力：通过合并请求，减少了对数据库的总体访问次数，从而降低了数据库的负载。
 		//2. 节省时间：避免了多次加锁解锁的过程，因为对于相同的资源只进行了一次查询，减少了时间消耗。
@@ -240,12 +239,12 @@ func (d *shortLinkDao) GeRedirectByURI(ctx context.Context, uri string) (*model.
 			err = d.db.WithContext(ctx).Table(record.TName()).Where("uri = ?", uri).First(record).Error
 			if err != nil {
 				// 设置空值来防御缓存穿透
-				if errors.Is(err, model.ErrRecordNotFound) {
-					err = d.slCache.SetCacheWithNotFound(ctx, uri)
+				if errors.Is(err, custom_err.ErrRecordNotFound) {
+					err = cache.ShortLinkGroupCountCache().SetCacheWithNotFound(ctx, uri)
 					if err != nil {
 						return nil, err
 					}
-					return nil, model.ErrRecordNotFound
+					return nil, custom_err.ErrRecordNotFound
 				}
 				return nil, err
 			}
@@ -261,11 +260,11 @@ func (d *shortLinkDao) GeRedirectByURI(ctx context.Context, uri string) (*model.
 		}
 		info, ok := val.(*model.Redirect)
 		if !ok {
-			return nil, model.ErrRecordNotFound
+			return nil, custom_err.ErrRecordNotFound
 		}
 		return info, nil
 	} else if errors.Is(err, cacheBase.ErrPlaceholder) {
-		return nil, model.ErrRecordNotFound
+		return nil, custom_err.ErrRecordNotFound
 	}
 
 	// 快速失败，如果是其他错误，直接返回

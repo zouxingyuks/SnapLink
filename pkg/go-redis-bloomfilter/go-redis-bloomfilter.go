@@ -14,7 +14,7 @@ func NewBloomFilter(client *redis.Client) *BloomFilter {
 }
 
 // ADD 添加元素
-// err 错误信息
+// custom_err 错误信息
 func (b *BloomFilter) ADD(ctx context.Context, key string, value string) (err error) {
 	count, err := b.client.Do(ctx, "BF.ADD", key, value).Result()
 	if err != nil {
@@ -30,7 +30,7 @@ func (b *BloomFilter) ADD(ctx context.Context, key string, value string) (err er
 
 // MADD 添加多个元素
 // nums 返回添加的元素个数,如果元素已经存在则返回0
-// err 错误信息
+// custom_err 错误信息
 func (b *BloomFilter) MADD(ctx context.Context, key string, values ...string) (nums []int64, err error) {
 	args := make([]any, len(values)+2)
 	args[0] = "BF.MADD"
@@ -49,7 +49,7 @@ func (b *BloomFilter) MADD(ctx context.Context, key string, values ...string) (n
 
 // EXIST 判断元素是否存在
 // exist 返回元素是否存在
-// err 错误信息
+// custom_err 错误信息
 func (b *BloomFilter) EXIST(ctx context.Context, key string, value string) (exist bool, err error) {
 	count, err := b.client.Do(ctx, "BF.EXISTS", key, value).Result()
 	if count.(int64) == 1 {
@@ -73,7 +73,7 @@ func (b *BloomFilter) MEXIST(ctx context.Context, key string, values ...string) 
 
 // EXISTOrADD 判断元素是否存在，如果不存在则添加
 // exist 返回元素是否存在
-// err 错误信息
+// custom_err 错误信息
 func (b *BloomFilter) EXISTOrADD(ctx context.Context, key string, value string) (exist bool, err error) {
 	exist, err = b.EXIST(ctx, key, value)
 	//如果不存在,且此错误非预定义的错误，则返回错误

@@ -157,7 +157,7 @@ func (h *LinkAccessStatisticHandler) GetStatisticByDay(c *gin.Context) {
 	startDate, err := time.Parse("2006-01-02", c.Query("startDate"))
 	if err != nil {
 		c.JSON(400, gin.H{
-			"err": "time param format err",
+			"custom_err": "time param format custom_err",
 		})
 		return
 
@@ -173,7 +173,7 @@ func (h *LinkAccessStatisticHandler) GetStatisticByDay(c *gin.Context) {
 	data, err := h.iDao.GetStatisticByDay(c, uri, startDate.Format("2006-01-02"), endDate.Format("2006-01-02"), order, page, pageSize)
 	if err != nil {
 		c.JSON(500, gin.H{
-			"err": err.Error(),
+			"custom_err": err.Error(),
 		})
 		return
 	}

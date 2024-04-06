@@ -79,7 +79,7 @@ func (s *sentinelService) Start() error {
 				logger.Panic(errors.Wrap(err, "创建 nacos 数据源失败").Error())
 			}
 			if err = ds.Initialize(); err != nil {
-				logger.Panic(errors.Wrap(err, "Fail to initialize nacos data source client, err: %+v").Error())
+				logger.Panic(errors.Wrap(err, "Fail to initialize nacos data source client, custom_err: %+v").Error())
 			}
 		}
 	default:
@@ -124,17 +124,17 @@ func loadRulesFromFile(filePath string) error {
 //	// 注册流控规则数据源
 //	h := datasource.NewDefaultPropertyHandler(datasource.FlowRuleJsonArrayParser, datasource.FlowRulesUpdater)
 //	ds := nacos.NewNacosDataSource("nacos", "sentinel", "flow", h)
-//	err := ds.Initialize()
-//	if err != nil {
-//		return err
+//	custom_err := ds.Initialize()
+//	if custom_err != nil {
+//		return custom_err
 //	}
-//	src, err := ds.ReadSource()
-//	if err != nil {
-//		return err
+//	src, custom_err := ds.ReadSource()
+//	if custom_err != nil {
+//		return custom_err
 //	}
-//	err = ds.Handle(src)
-//	if err != nil {
-//		return err
+//	custom_err = ds.Handle(src)
+//	if custom_err != nil {
+//		return custom_err
 //	}
 //	return nil
 //}
