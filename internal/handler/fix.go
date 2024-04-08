@@ -8,19 +8,16 @@ import (
 )
 
 type FixHandler struct {
-	iDao *dao.FixDao
 }
 
 func NewFixHandler() *FixHandler {
-	return &FixHandler{
-		iDao: dao.NewFixDao(),
-	}
+	return &FixHandler{}
 }
 
 // RebulidBF 重建布隆过滤器
 // 流程图 : https://drive.google.com/file/d/1RvYY7vC3be0z9u2ELOQukrQymTOQX-FZ/view?usp=sharing
 func (h *FixHandler) RebulidBF(c *gin.Context) {
-	errs := h.iDao.RebulidBF()
+	errs := dao.FixDao().RebulidBF()
 	if len(errs) > 0 {
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithMsg("重建布隆过滤器失败"), serialize.WithData(errs)).ToJSON(c)
 		return

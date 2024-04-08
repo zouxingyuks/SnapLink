@@ -49,22 +49,22 @@ func (c *bfCache) BFCreate(ctx context.Context, key string, errorRate float64, c
 }
 
 // BFAdd 添加值
-func (c *bfCache) BFAdd(ctx context.Context, key string, value string) error {
+func (c *bfCache) BFAdd(ctx context.Context, key string, value any) error {
 	return c.bfCache.Add(ctx, key, value)
 }
 
 // BFMAdd 批量添加多个值
-func (c *bfCache) BFMAdd(ctx context.Context, key string, values ...string) error {
+func (c *bfCache) BFMAdd(ctx context.Context, key string, values ...any) error {
 	return c.bfCache.MAdd(ctx, key, values...)
 }
 
 // BFExists 检查值是否存在
-func (c *bfCache) BFExists(ctx context.Context, key string, value string) (bool, error) {
+func (c *bfCache) BFExists(ctx context.Context, key string, value any) (bool, error) {
 	return c.bfCache.Exists(ctx, key, value)
 }
 
 // BFMExists 批量检查多个值是否存在
-func (c *bfCache) BFMExists(ctx context.Context, key string, values ...string) ([]bool, error) {
+func (c *bfCache) BFMExists(ctx context.Context, key string, values ...any) ([]bool, error) {
 	return c.bfCache.MExists(ctx, key, values...)
 }
 

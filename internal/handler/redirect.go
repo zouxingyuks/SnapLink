@@ -3,20 +3,17 @@ package handler
 import (
 	"SnapLink/internal/custom_err"
 	"SnapLink/internal/dao"
-	"SnapLink/internal/model"
 	"SnapLink/pkg/serialize"
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 )
 
 type RedirectHandler struct {
-	iDao dao.RedirectsDao
 }
 
 func NewRedirectHandler() (*RedirectHandler, error) {
 	var err error
 	h := new(RedirectHandler)
-	h.iDao, err = dao.NewRedirectsDao(model.GetDB(), model.GetCacheType().Rdb)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +35,7 @@ func (h *RedirectHandler) Redirect(c *gin.Context) {
 	shortUri := c.Param("uri")
 	//获取 short_uri 对应的原始链接
 	ctx := c.Request.Context()
-	info, err := h.iDao.GetByURI(ctx, shortUri)
+	info, err := dao.RedirectDao().GetByURI(ctx, shortUri)
 	if err != nil {
 		if errors.Is(err, custom_err.ErrRecordNotFound) {
 			serialize.NewResponse(404, serialize.WithMsg("短链接不存在")).ToJSON(c)

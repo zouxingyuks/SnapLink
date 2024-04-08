@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"SnapLink/internal/cache"
 	"SnapLink/internal/dao"
 	"SnapLink/internal/ecode"
 	"SnapLink/internal/model"
@@ -34,7 +33,6 @@ func NewShortLinkGroupHandler() ShortLinkGroupHandler {
 	return &shortLinkGroupsHandler{
 		iDao: dao.NewShortLinkGroupDao(
 			model.GetDB(),
-			cache.SLGroup(),
 		),
 	}
 }

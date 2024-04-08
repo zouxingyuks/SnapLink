@@ -41,7 +41,6 @@ type ShortLinkHandler interface {
 }
 
 type shortLinkHandler struct {
-	iDao dao.IShortLinkDao
 }
 
 // NewShortLinkHandler creating the handler interface
@@ -49,7 +48,6 @@ func NewShortLinkHandler() (ShortLinkHandler, error) {
 	var err error
 	h := new(shortLinkHandler)
 	Domain = config.Get().App.Domain
-	h.iDao, err = dao.NewShortLinkDao(model.GetDB(), model.GetCacheType().Rdb)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +107,7 @@ func (h *shortLinkHandler) Create(c *gin.Context) {
 	//3. 保存到数据库
 	// 对布隆过滤器误判的情况进行判断
 	ctx := middleware.WrapCtx(c)
-	err = h.iDao.Create(ctx, &sLink)
+	err = dao.ShortLinkDao().Create(ctx, &sLink)
 
 	// 特别对于唯一索引的错误进行处理
 	if err != nil {
@@ -174,7 +172,7 @@ func (h *shortLinkHandler) CreateBatch(c *gin.Context) {
 	ctx := middleware.WrapCtx(c)
 
 	// 特别对于唯一索引的错误进行处理
-	if sLink, err := h.iDao.CreateBatch(ctx, shortLinks); err != nil || sLink != nil {
+	if sLink, err := dao.ShortLinkDao().CreateBatch(ctx, shortLinks); err != nil || sLink != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithMsg("短链接已经存在")).ToJSON(c)
 			return
@@ -220,7 +218,7 @@ func (h *shortLinkHandler) List(c *gin.Context) {
 	ctx := middleware.WrapCtx(c)
 	var list []*model.ShortLink
 	var uris []string
-	total, err := h.iDao.Count(ctx, gid)
+	total, err := dao.ShortLinkDao().Count(ctx, gid)
 	if err != nil {
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
 		return
@@ -234,7 +232,7 @@ func (h *shortLinkHandler) List(c *gin.Context) {
 	}
 	if orderTag == "" {
 		//查询
-		list, err = h.iDao.List(ctx, gid, current, size)
+		list, err = dao.ShortLinkDao().List(ctx, gid, current, size)
 		if err != nil {
 			serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
 			return
@@ -369,7 +367,7 @@ func (h *shortLinkHandler) Delete(c *gin.Context) {
 		return
 	}
 	ctx := middleware.WrapCtx(c)
-	err := h.iDao.Delete(ctx, uri)
+	err := dao.ShortLinkDao().Delete(ctx, uri)
 	if err != nil {
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
 		return
@@ -394,7 +392,7 @@ func (h *shortLinkHandler) Update(c *gin.Context) {
 	}
 	ctx := middleware.WrapCtx(c)
 	// 0. 获取对应短链接的基本信息
-	info, err := h.iDao.GeRedirectByURI(ctx, form.Uri)
+	info, err := dao.ShortLinkDao().GeRedirectByURI(ctx, form.Uri)
 	if err != nil {
 		// 尝试从此处进行攻击，对此进行防御
 		if errors.Is(err, custom_err.ErrRecordNotFound) {
@@ -417,7 +415,7 @@ func (h *shortLinkHandler) Update(c *gin.Context) {
 	// 短链接未发生改变
 	if strings.Compare(info.Gid, form.Gid) == 0 {
 		// 更新短链接
-		err = h.iDao.Update(ctx, sl)
+		err = dao.ShortLinkDao().Update(ctx, sl)
 		if err != nil {
 			serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
 			return
@@ -426,7 +424,7 @@ func (h *shortLinkHandler) Update(c *gin.Context) {
 		return
 	}
 	// 短链接发生改变
-	err = h.iDao.UpdateWithMove(ctx, sl, form.Gid)
+	err = dao.ShortLinkDao().UpdateWithMove(ctx, sl, form.Gid)
 	if err != nil {
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
 		return

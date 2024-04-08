@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/pkg/errors"
-	"github.com/zhufuyi/sponge/pkg/logger"
 	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 	"sync"
@@ -17,33 +16,27 @@ const (
 	uriBF      = "uri"
 )
 
-type bfMakeFn = func(db *gorm.DB) (bool, []error)
+type bfMakeFn = func(db *gorm.DB) (bool, error)
 
 // 使用类工厂模式的思想来批量执行
-var bfs = map[string]bfMakeFn{
-	uriBF:      makeUriBF,
-	usernameBF: makeUsernameBF,
+var bfMakerFns = map[string]bfMakeFn{
+	uriBF:      makeBFWithShardingNum(uriBF, model.RedirectShardingNum, model.RedirectPrefix, "uri"),
+	usernameBF: makeBFWithShardingNum(usernameBF, model.TUserShardingNum, model.TUserPrefix, "username"),
 }
 
-type FixDao struct {
-	db  *gorm.DB
-	sfg *singleflight.Group
-}
-
-func NewFixDao() *FixDao {
-	return &FixDao{
-		db:  model.GetDB(),
-		sfg: new(singleflight.Group),
-	}
+type fixDao struct {
+	db   *gorm.DB
+	sfg  *singleflight.Group
+	once sync.Once
 }
 
 // RebulidBF 重建布隆过滤器
-func (d *FixDao) RebulidBF() (errs []error) {
+func (d *fixDao) RebulidBF() (errs []error) {
 	// 后面还是需要进行限流的
 	// 重建布隆过滤器,使用 singleflight 来保证只有一个协程进行重建
 	val, err, _ := d.sfg.Do("RebulidBF", func() (interface{}, error) {
 		// 重建布隆过滤器
-		for name, fn := range bfs {
+		for name, fn := range bfMakerFns {
 			// 删除布隆过滤器
 			if err := cache.BFCache().BFDelete(context.Background(), name); err != nil {
 				errs = append(errs, err)
@@ -63,124 +56,64 @@ func (d *FixDao) RebulidBF() (errs []error) {
 	return nil
 }
 
-// makeUsernameBF 生成 username 的布隆过滤器
-func makeUsernameBF(db *gorm.DB) (bool, []error) {
-	// 此结构体使用的不多,因此临时构建即可
-	type user struct {
-		ID       uint
-		Username string
-	}
-	//todo 此处改为远程配置
-	err := cache.BFCache().BFCreate(context.Background(), usernameBF, 0.001, 1e9)
-	// 如果创建失败，说明已经存在，正常结束即可
-	// 如果创建成功，说明不存在，需要添加数据
-	if err == nil {
-		//记录日志
-		errs := make([]error, 0, model.TUserShardingNum)
+// 针对分表的
+func makeBFWithShardingNum(key string, shardingNum int, prefix, param string) bfMakeFn {
+	return func(db *gorm.DB) (bool, error) {
+		// TODO: 此处改为远程配置
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		if err := cache.BFCache().BFCreate(ctx, key, 0.01, 1e9); err != nil {
+			// 记录日志
+			return false, err
+		}
+		errCh := make(chan error, shardingNum)
 		wg := sync.WaitGroup{}
-		for i := 0; i < model.TUserShardingNum; i++ {
-			tableName := fmt.Sprintf("%s-%d", model.TUserPrefix, i)
-			wg.Add(1)
+		wg.Add(shardingNum)
+
+		for i := 0; i < shardingNum; i++ {
+			tableName := fmt.Sprintf("%s-%d", prefix, i)
 			go func(id int, tName string) {
-				defer func() {
-					wg.Done()
-				}()
-				// 此处专门针对深分页问题进行优化,因为此处是全量查询
-				// 因此使用游标法进行查询
-				var cursor uint
-				for {
-					var records []user
-					err := db.Table(tName).Select("id, username").Where("id > ?", cursor).Limit(1000).Scan(&records).Error
-					if err != nil {
-						logger.Err(err)
-						break
-					}
-					l := len(records)
-					if l == 0 {
-						break
-					}
-					cursor = records[l-1].ID
-					usernames := make([]string, 0, l)
-					// 取出所有的 uri,注意不要使用 range 语法糖，因为 range 语法糖会创建临时变量
-					for i := 0; i < l; i++ {
-						usernames = append(usernames, records[i].Username)
-					}
-					err = cache.BFCache().BFMAdd(context.Background(), usernameBF, usernames...)
-					if err != nil {
-						errs[id] = err
-						break
-					}
+				defer wg.Done()
+				data, err := getAll(ctx, tableName, db, []string{param})
+				if err != nil {
+					errCh <- err
+					return
 				}
+				if err := cache.BFCache().BFMAdd(ctx, key, data[param]...); err != nil {
+					errCh <- err
+					return
+				}
+				errCh <- nil
 			}(i, tableName)
 		}
-		wg.Wait()
-		for _, err := range errs {
+		go func() {
+			wg.Wait()
+			close(errCh)
+		}()
+		for err := range errCh {
 			if err != nil {
-				return false, errs
+				return false, err
 			}
 		}
+		return true, nil
 	}
-	return true, nil
 }
-
-// makeUriBF 生成 uri 的布隆过滤器
-func makeUriBF(db *gorm.DB) (bool, []error) {
-	// 此结构体使用的不多,因此临时构建即可
-	type redirect struct {
-		ID  uint
-		URI string
-	}
-	//todo 此处改为远程配置
-	err := cache.BFCache().BFCreate(context.Background(), uriBF, 0.01, 1e9)
-	if err == nil {
-		//记录日志
-		var errs = []error{}
-		wg := sync.WaitGroup{}
-		for i := 0; i < model.RedirectShardingNum; i++ {
-			errs = append(errs, nil)
-			tableName := fmt.Sprintf("%s-%d", model.RedirectPrefix, i)
-			wg.Add(1)
-			go func(id int, tName string) {
-				defer func() {
-					wg.Done()
-				}()
-				// 此处专门针对深分页问题进行优化,因为此处是全量查询
-				// 因此使用游标法进行查询
-				var cursor uint
-				for {
-
-					records := make([]redirect, 0, 100)
-
-					err := db.Table(tName).Select("id, uri").Where("id > ?", cursor).Limit(100).Scan(&records).Error
-
-					if err != nil {
-						logger.Err(err)
-						break
-					}
-					l := len(records)
-					if l == 0 {
-						break
-					}
-					cursor = records[l-1].ID
-					uris := make([]string, 0, l)
-					// 取出所有的 uri,注意不要使用 range 语法糖，因为 range 语法糖会创建临时变量
-					for i := 0; i < l; i++ {
-						uris = append(uris, records[i].URI)
-					}
-					err = cache.BFCache().BFMAdd(context.Background(), uriBF, uris...)
-					if err != nil {
-						errs[id] = err
-						break
-					}
-				}
-			}(i, tableName)
+func makeBFWithoutShardingNum(key string, prefix, param string) bfMakeFn {
+	return func(db *gorm.DB) (bool, error) {
+		// TODO: 此处改为远程配置
+		ctx := context.Background()
+		if err := cache.BFCache().BFCreate(ctx, key, 0.01, 1e9); err != nil {
+			// 记录日志
+			return false, err
 		}
-		wg.Wait()
-		for _, err := range errs {
-			if err != nil {
-				return false, errs
-			}
+		tableName := prefix
+		data, err := getAll(ctx, tableName, db, []string{param})
+		if err != nil {
+			return false, err
 		}
+		if err := cache.BFCache().BFMAdd(ctx, key, data[param]...); err != nil {
+			return false, err
+		}
+		return true, nil
 	}
-	return true, nil
 }
