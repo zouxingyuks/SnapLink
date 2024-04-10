@@ -3,11 +3,11 @@ package cache
 import (
 	"SnapLink/internal/config"
 	"SnapLink/internal/custom_err"
-	cache2 "SnapLink/pkg/cache"
 	"context"
 	"github.com/pkg/errors"
 	"github.com/redis/go-redis/v9"
 	"github.com/zhufuyi/sponge/pkg/logger"
+	cache2 "github.com/zouxingyuks/common_pkg/cache"
 	"sync"
 	"time"
 )
@@ -28,6 +28,7 @@ func BFCache() *bfCache {
 	instanceBloomFilterCache.once.Do(func() {
 		opt := config.Get().BFRedis
 		var err error
+		keyGen := cache2.NewKeyGenerator(BloomFilterCachePrefixKey)
 		instanceBloomFilterCache.bfCache, err = cache2.NewBloomFilterCache(redis.NewClient(&redis.Options{
 			Addr:         opt.Addr,
 			Password:     opt.Password,
@@ -35,7 +36,7 @@ func BFCache() *bfCache {
 			ReadTimeout:  time.Duration(opt.ReadTimeout) * time.Second,
 			WriteTimeout: time.Duration(opt.WriteTimeout) * time.Second,
 			DialTimeout:  time.Duration(opt.DialTimeout) * time.Second,
-		}), cache2.NewKeyGenerator(BloomFilterCachePrefixKey))
+		}), cache2.WithKeyGen(keyGen))
 		if err != nil {
 			logger.Panic(errors.Wrap(custom_err.ErrCacheInitFailed, "BloomFilterCache").Error())
 		}
@@ -49,22 +50,22 @@ func (c *bfCache) BFCreate(ctx context.Context, key string, errorRate float64, c
 }
 
 // BFAdd 添加值
-func (c *bfCache) BFAdd(ctx context.Context, key string, value string) error {
+func (c *bfCache) BFAdd(ctx context.Context, key string, value any) error {
 	return c.bfCache.Add(ctx, key, value)
 }
 
 // BFMAdd 批量添加多个值
-func (c *bfCache) BFMAdd(ctx context.Context, key string, values ...string) error {
+func (c *bfCache) BFMAdd(ctx context.Context, key string, values ...any) error {
 	return c.bfCache.MAdd(ctx, key, values...)
 }
 
 // BFExists 检查值是否存在
-func (c *bfCache) BFExists(ctx context.Context, key string, value string) (bool, error) {
+func (c *bfCache) BFExists(ctx context.Context, key string, value any) (bool, error) {
 	return c.bfCache.Exists(ctx, key, value)
 }
 
 // BFMExists 批量检查多个值是否存在
-func (c *bfCache) BFMExists(ctx context.Context, key string, values ...string) ([]bool, error) {
+func (c *bfCache) BFMExists(ctx context.Context, key string, values ...any) ([]bool, error) {
 	return c.bfCache.MExists(ctx, key, values...)
 }
 

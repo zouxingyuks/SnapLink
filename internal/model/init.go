@@ -2,8 +2,7 @@
 package model
 
 import (
-	"fmt"
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"sync"
 	"time"
 
@@ -131,7 +130,18 @@ func InitRedis() {
 	}
 
 	var err error
-	redisCli, err = goredis.Init(fmt.Sprintf("%s:%s@%s/%d", config.Get().Redis.User, config.Get().Redis.Password, config.Get().Redis.Addr, config.Get().Redis.DB), opts...)
+	conf := config.Get().Redis
+	//redisCli, err = goredis.Init(fmt.Sprintf("%s:%s@%s/%d", config.Get().Redis.User, config.Get().Redis.Password, config.Get().Redis.Addr, config.Get().Redis.DB), opts...)
+	redisCli = redis.NewClient(&redis.Options{
+		Network:      conf.Network,
+		Addr:         conf.Addr,
+		Username:     conf.User,
+		Password:     conf.Password,
+		DB:           conf.DB,
+		DialTimeout:  time.Duration(conf.DialTimeout) * time.Second,
+		ReadTimeout:  time.Duration(conf.ReadTimeout) * time.Second,
+		WriteTimeout: time.Duration(conf.WriteTimeout) * time.Second,
+	})
 	if err != nil {
 		panic("goredis.Init error: " + err.Error())
 	}

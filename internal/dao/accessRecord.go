@@ -4,6 +4,7 @@ import (
 	"SnapLink/internal/model"
 	"context"
 	"fmt"
+	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 )
 
@@ -20,7 +21,8 @@ type LinkAccessRecordDao interface {
 }
 
 type linkAccessRecordDao struct {
-	db *gorm.DB
+	db  *gorm.DB
+	sfg singleflight.Group
 }
 
 // NewAccessRecord 创建访问记录

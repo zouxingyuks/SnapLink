@@ -25,10 +25,7 @@ type UsersHandler struct {
 // NewUsersHandler creating the handler interface
 func NewUsersHandler() (h *UsersHandler) {
 	h = &UsersHandler{
-		iDao: dao.NewTUserDao(
-			model.GetDB(),
-			cache.NewTUserCache(model.GetCacheType()),
-		),
+		iDao: dao.NewTUserDao(model.GetDB()),
 	}
 	return
 }

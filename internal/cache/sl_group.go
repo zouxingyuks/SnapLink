@@ -3,10 +3,10 @@ package cache
 import (
 	"SnapLink/internal/custom_err"
 	"SnapLink/internal/model"
-	cache2 "SnapLink/pkg/cache"
 	"encoding/json"
 	"github.com/pkg/errors"
 	"github.com/zhufuyi/sponge/pkg/logger"
+	cache2 "github.com/zouxingyuks/common_pkg/cache"
 	"sync"
 	"time"
 )
@@ -30,7 +30,8 @@ var (
 func SLGroup() *shortLinkGroupsCache {
 	slGroupInstance.once.Do(func() {
 		var err error
-		if slGroupInstance.kvCache, err = cache2.NewKVCache(model.GetRedisCli(), cache2.NewKeyGenerator(shortLinkGroupsCachePrefixKey), nil); err != nil {
+		keyGen := cache2.NewKeyGenerator(shortLinkGroupsCachePrefixKey)
+		if slGroupInstance.kvCache, err = cache2.NewKVCache(model.GetRedisCli(), nil, cache2.WithKeyGen(keyGen)); err != nil {
 			logger.Panic(errors.Wrap(custom_err.ErrCacheInitFailed, "ShortLinkGroupCache").Error())
 		}
 	})
@@ -41,11 +42,6 @@ func SLGroup() *shortLinkGroupsCache {
 type shortLinkGroupsCache struct {
 	kvCache cache2.IKVCache
 	once    sync.Once
-}
-
-// makeSLGroupKey 获取用户的 group 缓存 key
-func makeSLGroupKey(username string) string {
-	return shortLinkGroupsCachePrefixKey + username
 }
 
 // Set 设置用户的 groups 缓存
@@ -74,7 +70,7 @@ func (c *shortLinkGroupsCache) Get(ctx context.Context, username string) ([]*mod
 	if errors.Is(err, cache2.ErrKVCacheNotFound) {
 		return emptyShortLinkGroups, custom_err.ErrCacheNotFound
 	}
-	if value == cache2.EmptyValue {
+	if value == cache2.KVCacheEmptyValue {
 		return emptyShortLinkGroups, nil
 	}
 

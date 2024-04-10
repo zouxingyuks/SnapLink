@@ -3,10 +3,10 @@ package cache
 import (
 	"SnapLink/internal/custom_err"
 	"SnapLink/internal/model"
-	cache2 "SnapLink/pkg/cache"
 	"context"
 	"github.com/pkg/errors"
 	"github.com/zhufuyi/sponge/pkg/logger"
+	cache2 "github.com/zouxingyuks/common_pkg/cache"
 	"strconv"
 	"sync"
 	"time"
@@ -25,7 +25,8 @@ var (
 func ShortLinkGroupCountCache() *shortLinkGroupCountCache {
 	shortLinkGroupCountInstance.once.Do(func() {
 		var err error
-		if shortLinkGroupCountInstance.kvCache, err = cache2.NewKVCache(model.GetRedisCli(), cache2.NewKeyGenerator(ShortLinkGroupCountPrefix), LocalCache()); err != nil {
+		keyGen := cache2.NewKeyGenerator(ShortLinkGroupCountPrefix)
+		if shortLinkGroupCountInstance.kvCache, err = cache2.NewKVCache(model.GetRedisCli(), LocalCache(), cache2.WithKeyGen(keyGen)); err != nil {
 			logger.Panic(errors.Wrap(custom_err.ErrCacheInitFailed, "ShortLinkGroupCountCache").Error())
 		}
 	})
@@ -44,7 +45,7 @@ func (c *shortLinkGroupCountCache) Get(ctx context.Context, gid string) (int64, 
 	if errors.Is(err, cache2.ErrKVCacheNotFound) {
 		return emptyCount, custom_err.ErrCacheNotFound
 	}
-	if value == cache2.EmptyValue {
+	if value == cache2.KVCacheEmptyValue {
 		return emptyCount, nil
 	}
 	count, err := strconv.ParseInt(value, 10, 64)

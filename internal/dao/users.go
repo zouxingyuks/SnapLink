@@ -34,14 +34,10 @@ type tUserDao struct {
 }
 
 // NewTUserDao creating the dao interface
-func NewTUserDao(db *gorm.DB, xCache cache.TUserCache) TUserDao {
-	if xCache == nil {
-		return &tUserDao{db: db}
-	}
+func NewTUserDao(db *gorm.DB) TUserDao {
 	return &tUserDao{
-		db:    db,
-		cache: xCache,
-		sfg:   new(singleflight.Group),
+		db:  db,
+		sfg: new(singleflight.Group),
 	}
 }
 

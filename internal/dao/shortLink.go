@@ -5,7 +5,6 @@ import (
 	"SnapLink/internal/custom_err"
 	"SnapLink/internal/model"
 	"context"
-	"github.com/go-redis/redis/v8"
 	"github.com/pkg/errors"
 	cacheBase "github.com/zhufuyi/sponge/pkg/cache"
 	"github.com/zhufuyi/sponge/pkg/logger"
@@ -15,53 +14,10 @@ import (
 	"gorm.io/gorm"
 )
 
-var instanceShortLink struct {
-	IShortLinkDao
-	sync.Once
-}
-
-func ShortLinkDao() IShortLinkDao {
-	instanceShortLink.Once.Do(func() {
-		var err error
-		instanceShortLink.IShortLinkDao, err = NewShortLinkDao(model.GetDB(), model.GetRedisCli())
-		if err != nil {
-			logger.Panic(errors.Wrap(ErrInitDaoFailed, err.Error()).Error())
-		}
-	})
-	return instanceShortLink.IShortLinkDao
-}
-
-// IShortLinkDao 定义接口
-type IShortLinkDao interface {
-	Create(ctx context.Context, table *model.ShortLink) error
-	CreateBatch(ctx context.Context, tables []*model.ShortLink) (*model.ShortLink, error)
-	List(ctx context.Context, gid string, page, pageSize int) ([]*model.ShortLink, error)
-	Count(ctx context.Context, gid string) (int64, error)
-	Delete(ctx context.Context, uri string) error
-	GeRedirectByURI(ctx context.Context, uri string) (*model.Redirect, error)
-	Update(ctx context.Context, shortLink *model.ShortLink) error
-	UpdateWithMove(ctx context.Context, shortLink *model.ShortLink, newGid string) error
-}
-
 type shortLinkDao struct {
-	db  *gorm.DB
-	sfg *singleflight.Group
-}
-
-// NewShortLinkDao 创建 shortLinkDao
-func NewShortLinkDao(db *gorm.DB, client *redis.Client) (IShortLinkDao, error) {
-	var err error
-	dao := &shortLinkDao{
-		db:  db,
-		sfg: new(singleflight.Group),
-	}
-	if err != nil {
-		return nil, errors.Wrap(err, "NewShortLinkDao Failed")
-	}
-	if err != nil {
-		return nil, errors.Wrap(err, "NewShortLinkDao Failed")
-	}
-	return dao, nil
+	db   *gorm.DB
+	sfg  *singleflight.Group
+	once sync.Once
 }
 
 // Create 创建一条短链接

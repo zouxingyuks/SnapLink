@@ -3,11 +3,11 @@ package cache
 import (
 	"SnapLink/internal/custom_err"
 	"SnapLink/internal/model"
-	cache2 "SnapLink/pkg/cache"
 	"context"
 	"encoding/json"
 	"github.com/pkg/errors"
 	"github.com/zhufuyi/sponge/pkg/logger"
+	cache2 "github.com/zouxingyuks/common_pkg/cache"
 	"sync"
 	"time"
 )
@@ -22,7 +22,7 @@ var redirectInstance = new(redirectsCache)
 func Redirect() *redirectsCache {
 	redirectInstance.once.Do(func() {
 		var err error
-		if redirectInstance.kvCache, err = cache2.NewKVCache(model.GetRedisCli(), cache2.NewKeyGenerator(RedirectCachePrefixKey), LocalCache()); err != nil {
+		if redirectInstance.kvCache, err = cache2.NewKVCache(model.GetRedisCli(), LocalCache(), cache2.WithKeyGen(cache2.NewKeyGenerator(RedirectCachePrefixKey))); err != nil {
 			logger.Panic(errors.Wrap(custom_err.ErrCacheInitFailed, "RedirectsCache").Error())
 		}
 	})
@@ -55,7 +55,7 @@ func (c *redirectsCache) Get(ctx context.Context, uri string) (*model.Redirect, 
 	if errors.Is(err, cache2.ErrKVCacheNotFound) {
 		return nil, custom_err.ErrCacheNotFound
 	}
-	if value == cache2.EmptyValue {
+	if value == cache2.KVCacheEmptyValue {
 		return emptyRedirect, nil
 	}
 	redirect := new(model.Redirect)
