@@ -60,6 +60,14 @@ var (
 				return nil
 			}
 		},
+		model.TUserPrefix: func(ctx context.Context, action string, m map[string]any) error {
+			switch action {
+			case insertAction:
+				return cache.BFCache().BFAdd(ctx, "username", m["username"].(string))
+			default:
+				return nil
+			}
+		},
 	}
 )
 

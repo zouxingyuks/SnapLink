@@ -10,39 +10,13 @@ import (
 	"github.com/zhufuyi/sponge/pkg/ggorm/query"
 	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
+	"sync"
 )
 
-var _ TUserDao = (*tUserDao)(nil)
-
-// TUserDao defining the dao interface
-type TUserDao interface {
-	GetDB() *gorm.DB
-	Create(ctx context.Context, table *model.TUser) error
-	Update(ctx context.Context, table *model.TUser) error
-	GetByUsername(ctx context.Context, username string) (*model.TUser, error)
-	GetByCondition(ctx context.Context, condition *query.Conditions) (*model.TUser, error)
-	GetByConditionWithUsername(ctx context.Context, condition *query.Conditions, username string) (*model.TUser, error)
-	GetByColumns(ctx context.Context, params *query.Params) ([]*model.TUser, int64, error)
-	HasUsername(ctx context.Context, username string) (bool, error)
-	GetAllUserName(ctx context.Context) ([]string, error)
-}
-
 type tUserDao struct {
-	db    *gorm.DB
-	cache cache.TUserCache    // if nil, the cache is not used.
-	sfg   *singleflight.Group // if cache is nil, the sfg is not used.
-}
-
-// NewTUserDao creating the dao interface
-func NewTUserDao(db *gorm.DB) TUserDao {
-	return &tUserDao{
-		db:  db,
-		sfg: new(singleflight.Group),
-	}
-}
-
-func (d *tUserDao) GetDB() *gorm.DB {
-	return d.db
+	db   *gorm.DB
+	sfg  *singleflight.Group
+	once sync.Once
 }
 
 // Create 创建用户记录
@@ -54,9 +28,6 @@ func (d *tUserDao) Create(ctx context.Context, u *model.TUser) error {
 // Update 根据用户名更新用户信息
 func (d *tUserDao) Update(ctx context.Context, table *model.TUser) error {
 	err := d.updateData(ctx, d.db, table)
-	// delete slCache
-	// todo 解耦为异步删除
-	//_ = d.deleteCache(ctx, table.ID)
 	return err
 }
 
@@ -80,29 +51,6 @@ func (d *tUserDao) updateData(ctx context.Context, db *gorm.DB, table *model.TUs
 	return db.Table(table.TName()).WithContext(ctx).Where("username = ?", table.Username).Updates(update).Error
 }
 
-// GetByCondition get a record by condition
-// query conditions:
-//
-//	name: column name
-//	exp: expressions, which default is "=",  support =, !=, >, >=, <, <=, like, in
-//	value: column value, if exp=in, multiple values are separated by commas
-//	logic: logical type, defaults to and when value is null, only &(and), ||(or)
-//
-// example: find a male aged 20
-//
-//	condition = &query.Conditions{
-//	    Columns: []query.Column{
-//		{
-//			Name:    "age",
-//			Value:   20,
-//		},
-//		{
-//			Name:  "gender",
-//			Value: "male",
-//		},
-//	}
-//
-// PS: 此接口由于不带有 username 字段，所以会扫描所有的表
 func (d *tUserDao) GetByCondition(ctx context.Context, c *query.Conditions) (*model.TUser, error) {
 	queryStr, args, err := c.ConvertToGorm()
 	if err != nil {
@@ -135,69 +83,6 @@ func (d *tUserDao) GetByConditionWithUsername(ctx context.Context, c *query.Cond
 		return nil, err
 	}
 	return table, nil
-}
-
-// GetByColumns get paging records by column information,
-// Note: query performance degrades when table rows are very large because of the use of offset.
-//
-// params includes paging parameters and query parameters
-// paging parameters (required):
-//
-//	page: page number, starting from 0
-//	size: lines per page
-//	sort: sort fields, default is id backwards, you can add - sign before the field to indicate reverse order, no - sign to indicate ascending order, multiple fields separated by comma
-//
-// query parameters (not required):
-//
-//	name: column name
-//	exp: expressions, which default is "=",  support =, !=, >, >=, <, <=, like, in
-//	value: column value, if exp=in, multiple values are separated by commas
-//	logic: logical type, defaults to and when value is null, only &(and), ||(or)
-//
-// example: search for a male over 20 years of age
-//
-//	params = &query.Params{
-//	    Page: 0,
-//	    Size: 20,
-//	    Columns: []query.Column{
-//		{
-//			Name:    "age",
-//			Exp: ">",
-//			Value:   20,
-//		},
-//		{
-//			Name:  "gender",
-//			Value: "male",
-//		},
-//	}
-//
-// 此为扫描所有的表
-// todo 实现全表扫描
-func (d *tUserDao) GetByColumns(ctx context.Context, params *query.Params) ([]*model.TUser, int64, error) {
-	queryStr, args, err := params.ConvertToGormConditions()
-	if err != nil {
-		return nil, 0, errors.New("query params error: " + err.Error())
-	}
-
-	var total int64
-	if params.Sort != "ignore count" { // determine if count is required
-		err = d.db.WithContext(ctx).Model(&model.TUser{}).Select([]string{"id"}).Where(queryStr, args...).Count(&total).Error
-		if err != nil {
-			return nil, 0, err
-		}
-		if total == 0 {
-			return nil, total, nil
-		}
-	}
-
-	records := []*model.TUser{}
-	order, limit, offset := params.ConvertToPage()
-	err = d.db.WithContext(ctx).Order(order).Limit(limit).Offset(offset).Where(queryStr, args...).Find(&records).Error
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return records, total, err
 }
 
 // GetByUsername 根据用户名查询用户信息
@@ -247,18 +132,4 @@ func (d *tUserDao) HasUsername(ctx context.Context, username string) (bool, erro
 		return false, nil
 	}
 	return true, nil
-}
-
-// GetAllUserName 获取所有的用户名
-func (d *tUserDao) GetAllUserName(ctx context.Context) ([]string, error) {
-	usernames := make([]string, 0)
-	for i := 0; i < model.TUserShardingNum; i++ {
-		tUsernames := make([]string, 0)
-		err := d.db.WithContext(ctx).Table(fmt.Sprintf("%s-%d", model.TUserPrefix, i)).Model(&model.TUser{}).Pluck("username", &tUsernames).Error
-		if err != nil {
-			return nil, err
-		}
-		usernames = append(usernames, tUsernames...)
-	}
-	return usernames, nil
 }

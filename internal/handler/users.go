@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"SnapLink/internal/cache"
+	"SnapLink/internal/custom_err"
 	"SnapLink/internal/dao"
 	"SnapLink/internal/ecode"
 	"SnapLink/internal/model"
@@ -19,14 +19,11 @@ import (
 var phoneRegexp = `^\+[1-9]\d{1,14}$`
 
 type UsersHandler struct {
-	iDao dao.TUserDao
 }
 
 // NewUsersHandler creating the handler interface
 func NewUsersHandler() (h *UsersHandler) {
-	h = &UsersHandler{
-		iDao: dao.NewTUserDao(model.GetDB()),
-	}
+	h = new(UsersHandler)
 	return
 }
 
@@ -51,7 +48,7 @@ func (h *UsersHandler) GetByUsername(c *gin.Context) {
 
 	}
 	ctx := middleware.WrapCtx(c)
-	user, err := h.iDao.GetByUsername(ctx, username)
+	user, err := dao.TUserDao().GetByUsername(ctx, username)
 	if err != nil {
 		serialize.NewResponseWithErrCode(ecode.UserNotExistError, serialize.WithErr(err)).ToJSON(c)
 		return
@@ -76,7 +73,7 @@ func (h *UsersHandler) GetByUsernameDesensitization(c *gin.Context) {
 
 	}
 	ctx := middleware.WrapCtx(c)
-	user, err := h.iDao.GetByUsername(ctx, username)
+	user, err := dao.TUserDao().GetByUsername(ctx, username)
 	if err != nil {
 		serialize.NewResponseWithErrCode(ecode.UserNotExistError, serialize.WithErr(err)).ToJSON(c)
 		return
@@ -106,7 +103,7 @@ func (h *UsersHandler) HasUsername(c *gin.Context) {
 	}
 
 	ctx := middleware.WrapCtx(c)
-	has, err := h.iDao.HasUsername(ctx, username)
+	has, err := dao.TUserDao().HasUsername(ctx, username)
 	result := gin.H{
 		"success": !has,
 	}
@@ -141,7 +138,7 @@ func (h *UsersHandler) Register(c *gin.Context) {
 	}
 	//1. 检测用户名是否存在
 	ctx := middleware.WrapCtx(c)
-	has, err := h.iDao.HasUsername(ctx, form.Username)
+	has, err := dao.TUserDao().HasUsername(ctx, form.Username)
 	if err != nil {
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
 		return
@@ -160,20 +157,15 @@ func (h *UsersHandler) Register(c *gin.Context) {
 	}
 
 	//6. 注册用户
-	err = h.iDao.Create(ctx, u)
+	err = dao.TUserDao().Create(ctx, u)
 	if err != nil {
-		//布隆过滤器的漏网之鱼
-
-		if dao.ErrDuplicateEntry.Is(err) {
+		if custom_err.ErrDuplicateEntry.Is(err) {
 			serialize.NewResponseWithErrCode(ecode.UserNameExistError, serialize.WithErr(err)).ToJSON(c)
-			cache.BFCache().BFAdd(ctx, "username", u.Username)
 			return
 		}
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
 		return
 	}
-	//7. 加入布隆过滤器
-	err = cache.BFCache().BFAdd(ctx, "username", u.Username)
 	if err != nil {
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
 		return
@@ -204,7 +196,7 @@ func (h *UsersHandler) Login(c *gin.Context) {
 	}
 	//1. 检测用户名是否存在
 	ctx := middleware.WrapCtx(c)
-	has, err := h.iDao.HasUsername(ctx, form.Username)
+	has, err := dao.TUserDao().HasUsername(ctx, form.Username)
 	if err != nil {
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
 		return
@@ -220,7 +212,7 @@ func (h *UsersHandler) Login(c *gin.Context) {
 		//todo 如何更优雅的调用
 	}
 	//2. 检测密码是否正确
-	user, err := h.iDao.GetByUsername(ctx, form.Username)
+	user, err := dao.TUserDao().GetByUsername(ctx, form.Username)
 	if err != nil {
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
 		return
@@ -301,7 +293,7 @@ func (h *UsersHandler) UpdateInfo(c *gin.Context) {
 	if form.Password != "" {
 		user.Password = utils.Encrypt(form.Password)
 	}
-	err := h.iDao.Update(ctx, user)
+	err := dao.TUserDao().Update(ctx, user)
 	if err != nil {
 		serialize.NewResponseWithErrCode(ecode.ServiceError, serialize.WithErr(err)).ToJSON(c)
 		return

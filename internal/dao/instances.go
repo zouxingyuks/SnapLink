@@ -34,3 +34,14 @@ func RedirectDao() *redirectsDao {
 	})
 	return redirectInstance
 }
+
+var tUserDaoInstance = new(tUserDao)
+
+func TUserDao() *tUserDao {
+	tUserDaoInstance.once.Do(func() {
+		tUserDaoInstance.db = model.GetDB()
+		tUserDaoInstance.sfg = new(singleflight.Group)
+	})
+	return tUserDaoInstance
+
+}
