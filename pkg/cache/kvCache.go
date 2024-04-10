@@ -12,6 +12,13 @@ import (
 const EmptyValue = "kvCache empty value"
 const defaultTTL = time.Minute * 10
 
+func makeRandTTL(ttl time.Duration) time.Duration {
+	if ttl <= 0 {
+		return 0
+	}
+	return ttl + time.Duration(time.Now().UnixNano()%int64(ttl))
+}
+
 // IKVCache 多级 KV 缓存接口
 type IKVCache interface {
 	Get(ctx context.Context, key string) (string, error)
@@ -55,8 +62,9 @@ func (c *kvCache) Get(ctx context.Context, key string) (string, error) {
 		return "", err
 	}
 	if c.localCache != nil {
-		// 如果 ttl 小于 0，视为永不过期
-		if !c.localCache.SetWithTTL(key, value, 2, defaultTTL) {
+		// 将数据写入本地缓存
+		ttl := makeRandTTL(defaultTTL)
+		if !c.localCache.SetWithTTL(key, value, 2, ttl) {
 			return "", errors.Wrap(ErrKVCacheSetLocalCacheFailed, fmt.Sprintf("key: %s, value: %s", key, value))
 		}
 	}
@@ -68,9 +76,7 @@ func (c *kvCache) Get(ctx context.Context, key string) (string, error) {
 func (c *kvCache) Set(ctx context.Context, key string, value string, ttl time.Duration) error {
 	key = c.keyGen(key)
 	//做统一处理,以适配 redis 的 ttl 规则
-	if ttl <= 0 {
-		ttl = 0
-	}
+	ttl = makeRandTTL(ttl)
 	if c.localCache != nil {
 		// 如果 ttl 小于 0，视为永不过期
 		if ttl == 0 {
@@ -89,6 +95,7 @@ func (c *kvCache) Set(ctx context.Context, key string, value string, ttl time.Du
 
 // SetCacheWithNotFound 空值防御机制
 func (c *kvCache) SetCacheWithNotFound(ctx context.Context, key string, ttl time.Duration) error {
+	ttl = makeRandTTL(ttl)
 	return c.Set(ctx, key, EmptyValue, ttl)
 }
 
