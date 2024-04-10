@@ -8,11 +8,11 @@ import (
 
 type BFCache interface {
 	Create(ctx context.Context, key string, errorRate float64, capacity int) error
-	Add(ctx context.Context, key string, value string) error
-	MAdd(ctx context.Context, key string, values ...string) error
+	Add(ctx context.Context, key string, value any) error
+	MAdd(ctx context.Context, key string, values ...any) error
 
-	Exists(ctx context.Context, key string, value string) (bool, error)
-	MExists(ctx context.Context, key string, values ...string) ([]bool, error)
+	Exists(ctx context.Context, key string, value any) (bool, error)
+	MExists(ctx context.Context, key string, values ...any) ([]bool, error)
 
 	Delete(ctx context.Context, key string) error
 	Rename(ctx context.Context, key string, newKey string) error
@@ -50,7 +50,7 @@ func (b *bloomFilterCache) Create(ctx context.Context, key string, errorRate flo
 }
 
 // Add 添加值
-func (b *bloomFilterCache) Add(ctx context.Context, key string, value string) error {
+func (b *bloomFilterCache) Add(ctx context.Context, key string, value any) error {
 	key = b.keyGen(key)
 	if err := b.client.BFAdd(ctx, key, value).Err(); err != nil {
 		return errors.Wrap(ErrBFCacheAddFailed, err.Error())
@@ -59,7 +59,7 @@ func (b *bloomFilterCache) Add(ctx context.Context, key string, value string) er
 }
 
 // Exists 检查值是否存在
-func (b *bloomFilterCache) Exists(ctx context.Context, key string, value string) (bool, error) {
+func (b *bloomFilterCache) Exists(ctx context.Context, key string, value any) (bool, error) {
 	key = b.keyGen(key)
 	exist, err := b.client.BFExists(ctx, key, value).Result()
 	if err != nil {
@@ -69,7 +69,7 @@ func (b *bloomFilterCache) Exists(ctx context.Context, key string, value string)
 }
 
 // MAdd 批量添加多个值
-func (b *bloomFilterCache) MAdd(ctx context.Context, key string, values ...string) error {
+func (b *bloomFilterCache) MAdd(ctx context.Context, key string, values ...any) error {
 	key = b.keyGen(key)
 
 	pipeline := b.client.Pipeline()
@@ -85,7 +85,7 @@ func (b *bloomFilterCache) MAdd(ctx context.Context, key string, values ...strin
 }
 
 // MExists 批量检查多个值是否存在
-func (b *bloomFilterCache) MExists(ctx context.Context, key string, values ...string) ([]bool, error) {
+func (b *bloomFilterCache) MExists(ctx context.Context, key string, values ...any) ([]bool, error) {
 	key = b.keyGen(key)
 
 	pipeline := b.client.Pipeline()

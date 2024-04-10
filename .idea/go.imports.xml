@@ -4,6 +4,7 @@
     <option name="excludedPackages">
       <array>
         <option value="SnapLink/internal/model" />
+        <option value="github.com/zhufuyi/sponge/pkg/errcode" />
       </array>
     </option>
   </component>
